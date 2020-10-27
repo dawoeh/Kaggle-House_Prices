@@ -13,6 +13,7 @@ from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
 
+
 #####import data
 train = pd.read_csv("train.csv")
 test = pd.read_csv("test.csv")
@@ -32,7 +33,7 @@ print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
 data = [train,test]
 numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list = ['Utilities','PoolArea','OpenPorchSF','ScreenPorch']
+drop_list = ['Utilities','PoolArea','OpenPorchSF','ScreenPorch','GarageQual','FireplaceQu','MasVnrType','TotRmsAbvGrd','BsmtFinSF2','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
 
@@ -126,7 +127,7 @@ print(missing)
 
 ##Things to look into:  LotFrontage,LotArea,MasVnrArea,BsmtFinSF1,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF,1stFlrSF,2ndFlrSF,GrLivArea,LowQualFinSF,GarageArea,OpenPorchSF,EnclosedPorch,3SsnPorch,ScreenPorch
 
-hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','BsmtFinSF2','BsmtUnfSF','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','OpenPorchSF','EnclosedPorch','3SsnPorch','ScreenPorch']
+hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','OpenPorchSF','EnclosedPorch','3SsnPorch','ScreenPorch']
 
 for i in hist_list:
 	train[[i]].hist()
@@ -135,11 +136,14 @@ for i in hist_list:
 	plt.close
 openpsf=(-np.inf, 1, 50, 100, 200, 1000)
 screenp=(-np.inf, 1, 100, 200, 1000)
-##bsmtsf=(-np.inf, 1, 500, 1000, 2000, 10000)
+bsmtsf=(-np.inf, 1, 500, 1000, 2000, 10000)
+#lotar=(-np.inf, 3000, 6000, 8000, 10000, 20000, 300000)
 for i in data:
 	i['OpenPorchSF_bin'] = pd.cut(x=i['OpenPorchSF'], bins=openpsf, labels=False)
 	i['ScreenPorch_bin'] = pd.cut(x=i['ScreenPorch'], bins=screenp, labels=False)
-	##i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
+	i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
+	#i['LotArea_bin'] = pd.cut(x=i['LotArea'], bins=lotar, labels=False)
+
 
 
 train = train.drop(drop_list, axis=1)
@@ -154,6 +158,8 @@ plt.savefig('graphs/heatmap.png')
 plt.close
 x=0
 
+print(train.corr()['SalePrice'].sort_values())
+
 #####define training and test sets
 X_train = train.drop("SalePrice", axis=1)
 Y_train = train["SalePrice"]
@@ -161,14 +167,38 @@ Y_train = train["SalePrice"]
 
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
-logreg = LogisticRegression(max_iter=2000)
+######Fit and print score
+
+logreg = LogisticRegression(max_iter=1000)
 logreg.fit(x_train, y_train)
 Y_pred = logreg.predict(x_test)
 acc_log = round(logreg.score(x_train, y_train) * 100, 2)
-print('Accuracy Linear Regression:',acc_log)
+RMS = np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred))
+print("The score is %.5f" % RMS )
 
 #####fit data Random Forest
-#clf_simple=RandomForestClassifier(n_estimators= 500, random_state=666)
-#clf_simple.fit(x_train,y_train)
-#Y_pred=clf_simple.predict(x_test)
-#print("Accuracy Simple Random Forest:",metrics.accuracy_score(y_test, Y_pred))
+clf_simple=RandomForestClassifier(n_estimators= 500, random_state=666)
+clf_simple.fit(x_train,y_train)
+Y_pred=clf_simple.predict(x_test)
+print("Accuracy Simple Random Forest:",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+
+#####Optimize Hyperparameters
+# clf=RandomForestClassifier(random_state=666)
+# param_grid = { 
+#     'n_estimators': [100, 200],
+#     #'min_samples_split': [2, 5, 10, 15, 100],
+# 	#'min_samples_leaf': [1, 2, 5],
+#     'max_features': ['auto', 'sqrt', 'log2'],
+#     'max_depth' : [3,4,5,6],
+#     'criterion' :['gini', 'entropy'] 
+# }
+# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5)
+# CV_clf.fit(x_train, y_train)
+# print('Optimized Random Forest Classifier:')
+# print(CV_clf.best_params_)
+
+#####Optimized Random Forest
+clf_final=RandomForestClassifier(max_features='auto', n_estimators= 100, max_depth=3, criterion='entropy', random_state=666)
+clf_final.fit(x_test,y_test)
+Y_pred=clf_final.predict(x_test)
+print("Accuracy Optimized Random Forest:",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
