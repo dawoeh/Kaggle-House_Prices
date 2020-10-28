@@ -22,7 +22,6 @@ test = pd.read_csv("test.csv")
 print(train.describe())
 print(test.describe())
 
-##print(train.columns[train.isnull().any()].tolist())
 
 print(train.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(train.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
@@ -31,9 +30,10 @@ print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
 #####Fill empty cells with nan
 
 data = [train,test]
-numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool']
+numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list = ['Utilities','PoolArea','OpenPorchSF','ScreenPorch','GarageQual','FireplaceQu','MasVnrType','TotRmsAbvGrd','BsmtFinSF2','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF']
+drop_list_columns = ['Utilities','PoolArea','OpenPorchSF','ScreenPorch','GarageQual','GarageYrBlt','FireplaceQu','MasVnrType','TotRmsAbvGrd','BsmtFinSF2','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF','2ndFlrSF','1stFlrSF','BsmtFinType1','BsmtFinType2','BsmtFinSF2','BsmtFinSF1','PoolQC','GarageArea','EnclosedPorch','3SsnPorch','Street','MoSold','LandSlope','Exterior2nd','MSSubClass','Foundation']
+drop_list_features = []
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
 
@@ -92,6 +92,14 @@ for i in data:
 		for h in bmst_list:
 			if i.loc[k,'Foundation'] == 'Slab':
 				i.at[k, h] = 'Abs'
+		if i.at[k, '2ndFlrSF'] > 0:
+			i.at[k, '2ndFlr'] = 1
+		else:
+			i.at[k, '2ndFlr'] = 0
+		if i.at[k, 'BsmtFinSF2'] > 0:
+			i.at[k, '2ndBsmtFlr'] = 1
+		else:
+			i.at[k, '2ndBsmtFlr'] = 0
 		# if pd.isna(i.at[k, 'MSZoning']):
 		# 	print(i.loc[k,'YearBuilt'])
 		# 	##print(i.loc[i['YearBuilt'], 'MSZoning'].most_frequent())
@@ -108,7 +116,7 @@ for i in data:
 		imputer.fit(i[[j]])
 		i[[j]]= imputer.transform(i[[j]])
 		i[j]= label_encoder.fit_transform(i[j])
-	i = i.drop(drop_list, axis=1)
+	##i = i.drop(drop_list_columns, axis=1)
 	##i.drop(drop_list,axis=1,inplace=True)
 
 list_empty=train.columns[train.isnull().any()].tolist()
@@ -123,6 +131,15 @@ for i in list_empty:
 	missing.append([i,test[i].isnull().sum()])
 print(missing)
 
+trainMatrix = train.corr()
+
+f, ax = plt.subplots(figsize=(57, 55))
+
+sn.heatmap(trainMatrix, annot=True)
+plt.savefig('graphs/heatmap_before.png')
+plt.close
+x=0
+
 #######Feature engineering; create bins
 
 ##Things to look into:  LotFrontage,LotArea,MasVnrArea,BsmtFinSF1,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF,1stFlrSF,2ndFlrSF,GrLivArea,LowQualFinSF,GarageArea,OpenPorchSF,EnclosedPorch,3SsnPorch,ScreenPorch
@@ -136,25 +153,29 @@ for i in hist_list:
 	plt.close
 openpsf=(-np.inf, 1, 50, 100, 200, 1000)
 screenp=(-np.inf, 1, 100, 200, 1000)
-bsmtsf=(-np.inf, 1, 500, 1000, 2000, 10000)
+enclosedp=(-np.inf, 1, 100, 200, 300, 1000)
+ssnp=(-np.inf, 1, 100, 200, 1000)
+#bsmtsf=(-np.inf, 1, 500, 1000, 2000, 10000)
 #lotar=(-np.inf, 3000, 6000, 8000, 10000, 20000, 300000)
 for i in data:
 	i['OpenPorchSF_bin'] = pd.cut(x=i['OpenPorchSF'], bins=openpsf, labels=False)
 	i['ScreenPorch_bin'] = pd.cut(x=i['ScreenPorch'], bins=screenp, labels=False)
-	i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
+	i['EnclosedPorch_bin'] = pd.cut(x=i['EnclosedPorch'], bins=enclosedp, labels=False)
+	i['3SsnPorch_bin'] = pd.cut(x=i['3SsnPorch'], bins=ssnp, labels=False)
+	#i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
 	#i['LotArea_bin'] = pd.cut(x=i['LotArea'], bins=lotar, labels=False)
 
 
 
-train = train.drop(drop_list, axis=1)
-test = test.drop(drop_list, axis=1)
+train = train.drop(drop_list_columns, axis=1)
+test = test.drop(drop_list_columns, axis=1)
 
 trainMatrix = train.corr()
 
 f, ax = plt.subplots(figsize=(57, 55))
 
 sn.heatmap(trainMatrix, annot=True)
-plt.savefig('graphs/heatmap.png')
+plt.savefig('graphs/heatmap_after.png')
 plt.close
 x=0
 
