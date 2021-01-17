@@ -8,6 +8,7 @@ from collections import Counter
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
+import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
@@ -165,8 +166,6 @@ for i in data:
 	#i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
 	#i['LotArea_bin'] = pd.cut(x=i['LotArea'], bins=lotar, labels=False)
 
-
-
 train = train.drop(drop_list_columns, axis=1)
 test = test.drop(drop_list_columns, axis=1)
 
@@ -186,40 +185,54 @@ X_train = train.drop("SalePrice", axis=1)
 Y_train = train["SalePrice"]
 
 
-x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
+x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.2, random_state=666)
 
-######Fit and print score
+######LogReg
 
 logreg = LogisticRegression(max_iter=1000)
 logreg.fit(x_train, y_train)
 Y_pred = logreg.predict(x_test)
-acc_log = round(logreg.score(x_train, y_train) * 100, 2)
-RMS = np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred))
-print("The score is %.5f" % RMS )
+print("Accuracy Logistic Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 
-#####fit data Random Forest
+#####Random Forest
 clf_simple=RandomForestClassifier(n_estimators= 500, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
-print("Accuracy Simple Random Forest:",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 
-#####Optimize Hyperparameters
-# clf=RandomForestClassifier(random_state=666)
-# param_grid = { 
-#     'n_estimators': [100, 200],
-#     #'min_samples_split': [2, 5, 10, 15, 100],
-# 	#'min_samples_leaf': [1, 2, 5],
-#     'max_features': ['auto', 'sqrt', 'log2'],
-#     'max_depth' : [3,4,5,6],
-#     'criterion' :['gini', 'entropy'] 
-# }
-# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5)
-# CV_clf.fit(x_train, y_train)
-# print('Optimized Random Forest Classifier:')
-# print(CV_clf.best_params_)
+#####Optimize Random Forest
+clf=RandomForestClassifier(random_state=666)
+param_grid = { 
+    'n_estimators': [200],
+    'min_samples_split': [2, 5, 10, 15],
+	'min_samples_leaf': [3, 5, 8, 12],
+    'max_features': ['auto', 'sqrt', 'log2', None],
+    'max_depth' : [5, 10, 20, 30],
+    'criterion' :['gini', 'entropy'] 
+}
+CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1)
+CV_clf.fit(x_train, y_train)
+print('Optimized Random Forest Classifier:',CV_clf.best_params_)
+Y_pred=CV_clf.predict(x_test)
+print("Accuracy Optimized Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+## Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
 
-#####Optimized Random Forest
-clf_final=RandomForestClassifier(max_features='auto', n_estimators= 100, max_depth=3, criterion='entropy', random_state=666)
-clf_final.fit(x_test,y_test)
-Y_pred=clf_final.predict(x_test)
-print("Accuracy Optimized Random Forest:",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+####XGBoost
+xg_reg = xgb.XGBRegressor(objective ='reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.1,max_depth = 5, alpha = 10, n_estimators = 10)
+xg_reg.fit(x_train,y_train)
+Y_pred = xg_reg.predict(x_test)
+print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+
+####Optimized XGBoost
+param_grid = {
+     'colsample_bytree': np.linspace(0.3, 1, 5),
+     'n_estimators':[200],
+     'max_depth': [10, 20, 30, 40],
+     'learning_rate': [0.05, 0.1,0.15]
+}
+xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 5, verbose = 1)
+xg_reg_opt.fit(x_train, y_train)
+print("Best parameters XGBoost: ",xg_reg_opt.best_params_)
+Y_pred = xg_reg_opt.predict(x_test)
+print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+## Best parameters XGBoost:  {'colsample_bytree': 0.475, 'learning_rate': 0.05, 'max_depth': 40, 'n_estimators': 200}
