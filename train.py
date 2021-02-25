@@ -28,6 +28,18 @@ test.name = 'test'
 print(train.describe())
 print(test.describe())
 
+f, ax = plt.subplots(9, 9, figsize=(50, 50))
+l=1
+for col in train.columns:
+	if not col == 'SalePrice':
+		ax = plt.subplot(9,9,l)
+		sn.scatterplot(x=col,y='SalePrice',data=train)
+		ax.set_title(col)
+		l+=1
+f.tight_layout()
+plt.savefig('graphs/scatter_price_all.png')
+plt.close
+
 
 print(train.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(train.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
@@ -36,11 +48,12 @@ print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
 data = [train,test]
 numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list_columns = ['Utilities','PoolArea','GarageQual','GarageYrBlt','FireplaceQu','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF','BsmtFinType1','BsmtFinType2','PoolQC','Street','MoSold','LandSlope','Exterior2nd','MSSubClass','Foundation','SaleType','LotConfig','OverallCond','2ndBsmtFlr','1stFlrSF','2ndFlrSF']
-drop_list_features = []
-quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF']
-garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond']
-bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
+drop_list_columns = ['Utilities','PoolArea','FireplaceQu','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','PoolQC','Street','MoSold','LandSlope','Exterior2nd','MSSubClass','Foundation','SaleType','LotConfig','2ndBsmtFlr','1stFlrSF','2ndFlrSF']
+quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF']
+garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
+bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
+bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
+porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch']
 
 ####feature engineering; fill missing values
 
@@ -88,14 +101,31 @@ for i in data:
 				if pd.isna(i.at[k, 'GarageYrBlt']):
 					i.at[k, 'GarageYrBlt'] = 0
 			else:
-				if pd.isna(i.at[k, h]):
+				if pd.isna(i.at[k, h]) and not h == 'GarageArea':
 					i.at[k, h] = 'Abs'
 		if pd.isna(i.at[k, 'GarageArea']):
 			i.at[k, 'GarageArea'] = i.loc[i['GarageArea'] > 0, 'GarageArea'].mean()
 		if pd.isna(i.at[k, 'GarageCars']):
 			i.at[k, 'GarageCars'] = i.loc[i['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
+		if pd.isna(i.at[k, 'TotalBsmtSF']):
+			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
+		for h in bath_list:
+			if pd.isna(i.at[k, h]):
+				if i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtFullBath':
+					i.at[k, 'BsmtFullBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtFullBath'].value_counts().idxmax()
+				elif i.at[k, 'TotalBsmtSF'] == 0 and h == 'BsmtFullBath':
+					i.at[k, 'BsmtFullBath'] = 0
+				elif i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtHalfBath':
+					i.at[k, 'BsmtHalfBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
+				elif i.at[k, 'TotalBsmtSF'] == 0 and h == 'BsmtHalfBath':
+					i.at[k, 'BsmtHalfBath'] = 0
+		for h in porch_list:
+			if i.at[k, h] > 0:
+				i.at[k, h] = 1
+			else:
+				i.at[k, h] = 0
 		for h in bmst_list:
-			if i.loc[k,'Foundation'] == 'Slab':
+			if i.loc[k,'Foundation'] == 'Slab' and not (h == 'BsmtUnfSF' or h == 'BsmtFinSF1'):
 				i.at[k, h] = 'Abs'
 		if i.at[k, '2ndFlrSF'] > 0:
 			i.at[k, '2ndFlr'] = 1
@@ -107,6 +137,7 @@ for i in data:
 			i.at[k, '2ndBsmtFlr'] = 0
 		##i.at[k, 'BuildSF'] = i.at[k, '1stFlrSFSF'] + i.at[k, '2ndFlrSF']
 		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch']
+		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
 		# if pd.isna(i.at[k, 'MSZoning']):
 		# 	print(i.loc[k,'YearBuilt'])
 		# 	##print(i.loc[i['YearBuilt'], 'MSZoning'].most_frequent())
@@ -144,7 +175,7 @@ plt.savefig('graphs/heatmap_before.png')
 plt.close
 
 #####Histogramms numerical
-hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','OpenPorchSF','EnclosedPorch','3SsnPorch','ScreenPorch']
+hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','PorchSF','Bath_count']
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
 for i in hist_list:
@@ -156,7 +187,7 @@ f.tight_layout()
 plt.savefig('graphs/hist_num.png')
 plt.close
 
-###transform numerical to normal distribution
+###transform numerical to obtain normal distribution
 quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
 for i in data:
 	for col in quantile_list:
@@ -172,9 +203,17 @@ for i in data:
 	for col in drop_list_columns:
 		i.drop(col, axis=1, inplace=True)
 
+for i in data:
+	for col in bath_list:
+		i.drop(col, axis=1, inplace=True)
+
+for i in data:
+	for col in garage_list:
+		i.drop(col, axis=1, inplace=True)
+
 ###remove columns with low correlation to price
 for col in train.columns:
-	if math.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
+	if math.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.2:
 		train.drop(col, axis=1, inplace=True)
 		test.drop(col, axis=1, inplace=True)
 
@@ -210,11 +249,13 @@ x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=
 linreg = LinearRegression()
 linreg.fit(x_train, y_train)
 Y_pred = linreg.predict(x_test)
+##print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 #####Random Forest
 clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
+##print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####Optimize Random Forest
@@ -239,6 +280,7 @@ print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
+##print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 ####Optimized XGBoost
