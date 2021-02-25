@@ -1,23 +1,28 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
+import math
 
 from collections import Counter
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
+from sklearn.preprocessing import QuantileTransformer
 
 
 #####import data
 train = pd.read_csv("train.csv")
+train.name = 'train'
 test = pd.read_csv("test.csv")
+test.name = 'test'
 
 #####Show data statistics
 print(train.describe())
@@ -28,13 +33,12 @@ print(train.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(train.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
 
-#####Fill empty cells with nan
-
 data = [train,test]
 numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list_columns = ['Utilities','PoolArea','OpenPorchSF','ScreenPorch','GarageQual','GarageYrBlt','FireplaceQu','MasVnrType','TotRmsAbvGrd','BsmtFinSF2','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF','2ndFlrSF','1stFlrSF','BsmtFinType1','BsmtFinType2','BsmtFinSF2','BsmtFinSF1','PoolQC','GarageArea','EnclosedPorch','3SsnPorch','Street','MoSold','LandSlope','Exterior2nd','MSSubClass','Foundation']
+drop_list_columns = ['Utilities','PoolArea','GarageQual','GarageYrBlt','FireplaceQu','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','BsmtHalfBath','LowQualFinSF','BsmtFinType1','BsmtFinType2','PoolQC','Street','MoSold','LandSlope','Exterior2nd','MSSubClass','Foundation','SaleType','LotConfig','OverallCond','2ndBsmtFlr','1stFlrSF','2ndFlrSF']
 drop_list_features = []
+quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
 
@@ -101,6 +105,8 @@ for i in data:
 			i.at[k, '2ndBsmtFlr'] = 1
 		else:
 			i.at[k, '2ndBsmtFlr'] = 0
+		##i.at[k, 'BuildSF'] = i.at[k, '1stFlrSFSF'] + i.at[k, '2ndFlrSF']
+		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch']
 		# if pd.isna(i.at[k, 'MSZoning']):
 		# 	print(i.loc[k,'YearBuilt'])
 		# 	##print(i.loc[i['YearBuilt'], 'MSZoning'].most_frequent())
@@ -117,8 +123,6 @@ for i in data:
 		imputer.fit(i[[j]])
 		i[[j]]= imputer.transform(i[[j]])
 		i[j]= label_encoder.fit_transform(i[j])
-	##i = i.drop(drop_list_columns, axis=1)
-	##i.drop(drop_list,axis=1,inplace=True)
 
 list_empty=train.columns[train.isnull().any()].tolist()
 missing = []
@@ -132,107 +136,124 @@ for i in list_empty:
 	missing.append([i,test[i].isnull().sum()])
 print(missing)
 
+####Correlation Matrix
 trainMatrix = train.corr()
-
 f, ax = plt.subplots(figsize=(57, 55))
-
 sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_before.png')
 plt.close
-x=0
 
-#######Feature engineering; create bins
-
-##Things to look into:  LotFrontage,LotArea,MasVnrArea,BsmtFinSF1,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF,1stFlrSF,2ndFlrSF,GrLivArea,LowQualFinSF,GarageArea,OpenPorchSF,EnclosedPorch,3SsnPorch,ScreenPorch
-
+#####Histogramms numerical
 hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','OpenPorchSF','EnclosedPorch','3SsnPorch','ScreenPorch']
-
+f, ax = plt.subplots(4, 4, figsize=(20, 20))
+l=1
 for i in hist_list:
-	train[[i]].hist()
-	path = 'graphs/{}.png'.format(i)
-	plt.savefig(path)
-	plt.close
-openpsf=(-np.inf, 1, 50, 100, 200, 1000)
-screenp=(-np.inf, 1, 100, 200, 1000)
-enclosedp=(-np.inf, 1, 100, 200, 300, 1000)
-ssnp=(-np.inf, 1, 100, 200, 1000)
-#bsmtsf=(-np.inf, 1, 500, 1000, 2000, 10000)
-#lotar=(-np.inf, 3000, 6000, 8000, 10000, 20000, 300000)
-for i in data:
-	i['OpenPorchSF_bin'] = pd.cut(x=i['OpenPorchSF'], bins=openpsf, labels=False)
-	i['ScreenPorch_bin'] = pd.cut(x=i['ScreenPorch'], bins=screenp, labels=False)
-	i['EnclosedPorch_bin'] = pd.cut(x=i['EnclosedPorch'], bins=enclosedp, labels=False)
-	i['3SsnPorch_bin'] = pd.cut(x=i['3SsnPorch'], bins=ssnp, labels=False)
-	#i['TotalBsmtSF_bin'] = pd.cut(x=i['TotalBsmtSF'], bins=bsmtsf, labels=False)
-	#i['LotArea_bin'] = pd.cut(x=i['LotArea'], bins=lotar, labels=False)
-
-train = train.drop(drop_list_columns, axis=1)
-test = test.drop(drop_list_columns, axis=1)
-
-trainMatrix = train.corr()
-
-f, ax = plt.subplots(figsize=(57, 55))
-
-sn.heatmap(trainMatrix, annot=True)
-plt.savefig('graphs/heatmap_after.png')
+	ax = plt.subplot(4,4,l)
+	sn.histplot(data=train[i])
+	ax.set_title(i)
+	l+=1
+f.tight_layout()
+plt.savefig('graphs/hist_num.png')
 plt.close
-x=0
 
-print(train.corr()['SalePrice'].sort_values())
+###transform numerical to normal distribution
+quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
+for i in data:
+	for col in quantile_list:
+		if i.name == 'test' and col == 'SalePrice':
+			pass
+		elif i.name == 'train' and col == 'SalePrice':
+			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
+		else:
+			i[col] = quantile.fit_transform(i.loc[:,col].values.reshape(-1, 1))
+
+####delete defined columns
+for i in data:
+	for col in drop_list_columns:
+		i.drop(col, axis=1, inplace=True)
+
+###remove columns with low correlation to price
+for col in train.columns:
+	if math.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
+		train.drop(col, axis=1, inplace=True)
+		test.drop(col, axis=1, inplace=True)
+
+###plot new distributions
+f, ax = plt.subplots(8, 7, figsize=(40, 40))
+l=1
+for col in train.columns:
+	ax = plt.subplot(8,7,l)
+	sn.histplot(data=train[col],kde=True)
+	ax.set_title(col)
+	l+=1
+
+f.tight_layout()
+plt.savefig('graphs/hist_after_distr.png')
+plt.close
+
+###final correlation matrix
+trainMatrix = train.corr()
+f, ax = plt.subplots(figsize=(32, 30))
+sn.heatmap(trainMatrix, annot=True)
+plt.savefig('graphs/heatmap_cutoff.png')
+plt.close
+
+##print(train.corr()['SalePrice'].sort_values())
 
 #####define training and test sets
 X_train = train.drop("SalePrice", axis=1)
 Y_train = train["SalePrice"]
+x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
+######LinReg
 
-x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.2, random_state=666)
-
-######LogReg
-
-logreg = LogisticRegression(max_iter=1000)
-logreg.fit(x_train, y_train)
-Y_pred = logreg.predict(x_test)
-print("Accuracy Logistic Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
-
+linreg = LinearRegression()
+linreg.fit(x_train, y_train)
+Y_pred = linreg.predict(x_test)
+print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 #####Random Forest
-clf_simple=RandomForestClassifier(n_estimators= 500, random_state=666)
+clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
-print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####Optimize Random Forest
-clf=RandomForestClassifier(random_state=666)
-param_grid = { 
-    'n_estimators': [200],
-    'min_samples_split': [2, 5, 10, 15],
-	'min_samples_leaf': [3, 5, 8, 12],
-    'max_features': ['auto', 'sqrt', 'log2', None],
-    'max_depth' : [5, 10, 20, 30],
-    'criterion' :['gini', 'entropy'] 
-}
-CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1)
-CV_clf.fit(x_train, y_train)
-print('Optimized Random Forest Classifier:',CV_clf.best_params_)
-Y_pred=CV_clf.predict(x_test)
-print("Accuracy Optimized Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+
+# clf=RandomForestRegressor(random_state=666)
+# param_grid = { 
+#     'n_estimators': [200],
+#     'min_samples_split': [2, 5, 10, 15],
+# 	'min_samples_leaf': [3, 5, 8, 12],
+#     'max_features': ['auto', 'sqrt', 'log2', None],
+#     'max_depth' : [5, 10, 20, 30],
+#     'criterion' :['gini', 'entropy'] 
+# }
+# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1)
+# CV_clf.fit(x_train, y_train)
+# print('Optimized Random Forest Classifier:',CV_clf.best_params_)
+# Y_pred=CV_clf.predict(x_test)
+# print("Accuracy Optimized Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
 
 ####XGBoost
-xg_reg = xgb.XGBRegressor(objective ='reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.1,max_depth = 5, alpha = 10, n_estimators = 10)
+xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
-print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 ####Optimized XGBoost
-param_grid = {
-     'colsample_bytree': np.linspace(0.3, 1, 5),
-     'n_estimators':[200],
-     'max_depth': [10, 20, 30, 40],
-     'learning_rate': [0.05, 0.1,0.15]
-}
-xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 5, verbose = 1)
-xg_reg_opt.fit(x_train, y_train)
-print("Best parameters XGBoost: ",xg_reg_opt.best_params_)
-Y_pred = xg_reg_opt.predict(x_test)
-print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+# param_grid = {
+#      'colsample_bytree': np.linspace(0.3, 1, 4),
+#      'n_estimators':[100,500,1000],
+#      'max_depth': [3, 5, 7, 10],
+#      'learning_rate': [0.05, 0.1,0.15],
+#      'min_child_weight': [1,3,6],
+#      'booster': ['gbtree'],
+#      'objective': ['reg:squarederror']
+# }
+# xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 3, verbose = 1)
+# xg_reg_opt.fit(x_train, y_train)
+# print("Best parameters XGBoost: ",xg_reg_opt.best_params_)
+# Y_pred = xg_reg_opt.predict(x_test)
+# print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters XGBoost:  {'colsample_bytree': 0.475, 'learning_rate': 0.05, 'max_depth': 40, 'n_estimators': 200}
