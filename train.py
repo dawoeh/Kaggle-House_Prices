@@ -48,7 +48,7 @@ print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
 data = [train,test]
 numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list_columns = ['Utilities','PoolArea','FireplaceQu','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','PoolQC','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','LotConfig','2ndBsmtFlr','1stFlrSF','2ndFlrSF']
+drop_list_columns = ['Utilities','PoolArea','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','LotConfig','2ndBsmtFlr','1stFlrSF','2ndFlrSF','BsmtFinSF1','OverallQual']
 quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF','QualitySum','OverallQual']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
@@ -110,6 +110,8 @@ for i in data:
 			i.at[k, 'GarageCars'] = i.loc[i['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
 		if pd.isna(i.at[k, 'TotalBsmtSF']):
 			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
+		if pd.isna(i.at[k, 'LotFrontage']):  
+			i.at[k, 'LotFrontage'] = math.sqrt(i.at[k,"LotArea"]) * i.at["LotFrontage"].mean() / math.sqrt(i.at["LotArea"].mean())
 		for h in bath_list:
 			if pd.isna(i.at[k, h]):
 				if i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtFullBath':
@@ -137,6 +139,10 @@ for i in data:
 		else:
 			i.at[k, '2ndBsmtFlr'] = 0
 		i.at[k, 'QualitySum'] = 0
+		if i.at[k, 'YearRemodAdd'] == i.at[k, 'YearBuilt']:
+			i.at[k, 'YearRemodAdd'] = 0
+		else: 
+			i.at[k, 'YearRemodAdd'] = i.at[k, 'YearBuilt'].max() - i.at[k, 'YearRemodAdd']
 		for l in quality_sum_list:
 			if i.at[k, l] == 'Ex':
 				i.at[k, 'QualitySum'] += 5
@@ -147,10 +153,12 @@ for i in data:
 			elif i.at[k, l] == 'Fa':
 				i.at[k, 'QualitySum'] += 2
 			elif i.at[k, l] == 'Po':
-				i.at[k, 'QualitySum'] += 1				
-		##i.at[k, 'BuildSF'] = i.at[k, '1stFlrSFSF'] + i.at[k, '2ndFlrSF']
+				i.at[k, 'QualitySum'] += 1
+		if i.at[k, 'TotalBsmtSF'] > 0:
+			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']		
 		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch']
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
+		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / math.sqrt(i.at[k,"LotArea"])
 		# if pd.isna(i.at[k, 'MSZoning']):
 		# 	print(i.loc[k,'YearBuilt'])
 		# 	##print(i.loc[i['YearBuilt'], 'MSZoning'].most_frequent())
@@ -215,14 +223,17 @@ for i in data:
 for i in data:
 	for col in drop_list_columns:
 		i.drop(col, axis=1, inplace=True)
-
-for i in data:
 	for col in bath_list:
 		i.drop(col, axis=1, inplace=True)
-
-for i in data:
 	for col in garage_list:
 		i.drop(col, axis=1, inplace=True)
+	for col in porch_list:
+		i.drop(col, axis=1, inplace=True)
+	for col in quality_sum_list:
+		if (col == 'GarageQual' or col == 'GarageCond'):
+			pass
+		else:
+			i.drop(col, axis=1, inplace=True)
 
 ###remove columns with low correlation to price
 for col in train.columns:
