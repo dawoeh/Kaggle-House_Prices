@@ -3,9 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
-import math
-
-from collections import Counter
 
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
@@ -25,8 +22,8 @@ test = pd.read_csv("test.csv")
 test.name = 'test'
 
 #####Show data statistics
+print('***Initial Analysis***')
 print(train.describe())
-print(test.describe())
 
 f, ax = plt.subplots(9, 9, figsize=(50, 50))
 l=1
@@ -39,14 +36,35 @@ for col in train.columns:
 f.tight_layout()
 plt.savefig('graphs/scatter_price_all.png')
 plt.close
-
-
-print(train.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
-print(train.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
-print(train.groupby('Neighborhood', as_index=False)['YearBuilt'].mean())
+print('Scatter plot against SalePrice for each feature in the dataset created.')
 
 data = [train,test]
-numeric_list = ['Alley','Street','PoolQC','MiscFeature','Pool','2ndFlr']
+
+###Identify and count missing values
+for i in data:
+	if i.name == 'train':
+		mis_train = i.isnull().sum()
+		print('Columns with missing values in train:')
+		print(mis_train[mis_train > 0])
+	elif i.name == 'test':
+		mis_test = i.isnull().sum()
+		print('Columns with missing values in test:')
+		print(mis_test[mis_test > 0])
+
+mis_overall = np.add(mis_train,mis_test)
+print('Columns with missing values in total:')
+print(mis_overall[mis_overall > 0])
+
+####combine test and train data for analysis
+combine_data = pd.concat([train, test], axis=0) 
+
+####analyse correlations for features with missing values
+print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
+print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
+print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
+
+
+numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
 drop_list_columns = ['Utilities','PoolArea','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','LotConfig','2ndBsmtFlr','1stFlrSF','2ndFlrSF','BsmtFinSF1','OverallQual']
 quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF','QualitySum','OverallQual']
@@ -71,14 +89,8 @@ for i in data:
 			i.at[k,'Street'] = 1
 		elif i.loc[k,'Street'] == 'Pave':
 			i.at[k,'Street'] = 2
-		if i.loc[k,'PoolQC'] == 'Ex':
-			i.at[k,'PoolQC'] = 1
-		elif i.loc[k,'PoolQC'] == 'Gd':
-			i.at[k,'PoolQC'] = 2
-		elif i.loc[k,'PoolQC'] == 'Fa':
-			i.at[k,'PoolQC'] = 3
-		else:
-			i.at[k,'PoolQC'] = 0
+		if pd.isna(i.at[k, 'PoolQC']):
+			i.at[k,'PoolQC'] = 'Abs'
 		if i.loc[k,'PoolArea'] > 0:
 			i.at[k,'Pool'] = 1
 		else:
@@ -91,12 +103,20 @@ for i in data:
 			i.at[k, 'Fence'] = 'Abs'
 		if pd.isna(i.at[k, 'FireplaceQu']):
 			i.at[k, 'FireplaceQu'] = 'Abs'
-		if pd.isna(i.at[k, 'MasVnrType']):
-			i.at[k, 'MasVnrType'] = 'Abs'
-		if pd.isna(i.at[k, 'MasVnrArea']):
-			i.at[k, 'MasVnrArea'] = i.loc[i['MasVnrArea'] > 0, 'MasVnrArea'].mean()
-		if pd.isna(i.at[k, 'LotFrontage']):
-			i.at[k, 'LotFrontage'] = i.loc[i['LotFrontage'] > 0, 'LotFrontage'].mean()		
+		if pd.isna(i.at[k, 'MasVnrType']): ######Feature depends on OverallQual; use it as criterion to fill missing values
+			if i.at[k, 'OverallQual'] == 7:
+				i.at[k, 'MasVnrType'] = 'BrkFace'
+			elif i.at[k, 'OverallQual'] > 7:
+				i.at[k, 'MasVnrType'] = 'Stone'
+			else:
+				i.at[k, 'MasVnrType'] = 'None'
+		if pd.isna(i.at[k, 'MasVnrArea']): ######no strong correlation with any other feature, fill with data mean
+			if i.at[k, 'MasVnrType'] != 'None':
+				i.at[k, 'MasVnrArea'] = combine_data.loc[combine_data['MasVnrArea'] > 0, 'MasVnrArea'].mean()
+			else:
+				i.at[k, 'MasVnrArea'] = 0
+		if pd.isna(i.at[k, 'LotFrontage']): ######no strong correlation with any other feature, fill with data mean
+			i.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
 		for h in garage_list:
 			if h == 'GarageYrBlt':
 				if pd.isna(i.at[k, 'GarageYrBlt']):
@@ -111,7 +131,7 @@ for i in data:
 		if pd.isna(i.at[k, 'TotalBsmtSF']):
 			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
 		if pd.isna(i.at[k, 'LotFrontage']):  
-			i.at[k, 'LotFrontage'] = math.sqrt(i.at[k,"LotArea"]) * i.at["LotFrontage"].mean() / math.sqrt(i.at["LotArea"].mean())
+			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,"LotArea"]) * combine_data.at["LotFrontage"].mean() / np.sqrt(combine_data.at["LotArea"].mean())
 		for h in bath_list:
 			if pd.isna(i.at[k, h]):
 				if i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtFullBath':
@@ -139,10 +159,6 @@ for i in data:
 		else:
 			i.at[k, '2ndBsmtFlr'] = 0
 		i.at[k, 'QualitySum'] = 0
-		if i.at[k, 'YearRemodAdd'] == i.at[k, 'YearBuilt']:
-			i.at[k, 'YearRemodAdd'] = 0
-		else: 
-			i.at[k, 'YearRemodAdd'] = i.at[k, 'YearBuilt'].max() - i.at[k, 'YearRemodAdd']
 		for l in quality_sum_list:
 			if i.at[k, l] == 'Ex':
 				i.at[k, 'QualitySum'] += 5
@@ -155,17 +171,21 @@ for i in data:
 			elif i.at[k, l] == 'Po':
 				i.at[k, 'QualitySum'] += 1
 		if i.at[k, 'TotalBsmtSF'] > 0:
-			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']		
+			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']
+		i.at[k, 'YearRemodAdd'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']		
 		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch']
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
-		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / math.sqrt(i.at[k,"LotArea"])
-		# if pd.isna(i.at[k, 'MSZoning']):
-		# 	print(i.loc[k,'YearBuilt'])
-		# 	##print(i.loc[i['YearBuilt'], 'MSZoning'].most_frequent())
-		# 	if i.loc[k,'YearBuilt'] < 1930:
-		# 		i.at[k, 'MSZoning'] = 'C (all)'
-		# 	elif i.loc[k,'YearBuilt'] < 1960:
-		# 		i.at[k, 'MSZoning'] = i.loc[i['Neighborhood'], 'MSZoning'].value_counts().idxmax()				
+		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,"LotArea"])
+		if pd.isna(i.at[k, 'MSZoning']): #####fill missing values based on 
+			i.at[k, 'MSZoning'] = 'C (all)'
+			if i.loc[k,'YearBuilt'] > 1938:
+				i.at[k, 'MSZoning'] = 'RM'
+			if i.loc[k,'YearBuilt'] > 1948:
+				i.at[k, 'MSZoning'] = 'RH'
+			if i.loc[k,'YearBuilt'] > 1970:
+				i.at[k, 'MSZoning'] = 'RL'
+			if i.loc[k,'YearBuilt'] > 2000:
+				i.at[k, 'MSZoning'] = 'FV'
 		k+=1
 	for j in numeric_list:
 		i[j] = pd.to_numeric(i[j])
@@ -237,7 +257,7 @@ for i in data:
 
 ###remove columns with low correlation to price
 for col in train.columns:
-	if math.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
+	if np.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
 		train.drop(col, axis=1, inplace=True)
 		test.drop(col, axis=1, inplace=True)
 
