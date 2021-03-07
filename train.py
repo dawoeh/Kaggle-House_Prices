@@ -66,13 +66,13 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
 encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list_columns = ['Utilities','PoolArea','MasVnrType','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','LotConfig','2ndBsmtFlr','1stFlrSF','2ndFlrSF','BsmtFinSF1','OverallQual']
-quantile_list = ['SalePrice','LotArea','LotFrontage','YearBuilt','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','WoodDeckSF','PorchSF','QualitySum','OverallQual']
+drop_list_columns = ['Utilities','PoolArea','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','2ndBsmtFlr','1stFlrSF','2ndFlrSF','BsmtFinSF1','OverallQual','YearBuilt','YearRemodAdd']
+quantile_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
-porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch']
+porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
 
 ####feature engineering; fill missing values
 
@@ -172,10 +172,15 @@ for i in data:
 				i.at[k, 'QualitySum'] += 1
 		if i.at[k, 'TotalBsmtSF'] > 0:
 			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']
-		i.at[k, 'YearRemodAdd'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']		
-		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch']
+		i.at[k, 'SinceRenov'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']	
+		i.at[k, 'Age'] = i.at[k, 'YrSold'] - i.at[k, 'YearBuilt']	
+		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch'] + i.at[k, 'WoodDeckSF']
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
 		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,"LotArea"])
+		if i.at[k, 'WoodDeckSF'] > 0:
+			i.at[k, 'WoodDeck'] = 1
+		else:
+			i.at[k, 'WoodDeck'] = 0
 		if pd.isna(i.at[k, 'MSZoning']): #####fill missing values based on 
 			i.at[k, 'MSZoning'] = 'C (all)'
 			if i.loc[k,'YearBuilt'] > 1938:
@@ -200,13 +205,21 @@ list_empty=train.columns[train.isnull().any()].tolist()
 missing = []
 for i in list_empty:
 	missing.append([i,train[i].isnull().sum()])
-print(missing)
+if missing:
+	print('Some values in the training set are still missing!')
+	print(missing)
+else:
+	print('No missing values in the training set left!')
 
 list_empty=test.columns[test.isnull().any()].tolist()
 missing = []
 for i in list_empty:
 	missing.append([i,test[i].isnull().sum()])
-print(missing)
+if missing:
+	print('Some values in the test set are still missing!')
+	print(missing)
+else:
+	print('No missing values in the test set left!')
 
 ####Correlation Matrix
 trainMatrix = train.corr()
@@ -256,10 +269,14 @@ for i in data:
 			i.drop(col, axis=1, inplace=True)
 
 ###remove columns with low correlation to price
+drop_cutoff = []
 for col in train.columns:
 	if np.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
+		drop_cutoff.append([col, train['SalePrice'].corr(train[col])])
 		train.drop(col, axis=1, inplace=True)
 		test.drop(col, axis=1, inplace=True)
+print('The following features were dropped due to low correlation:')
+print(drop_cutoff)
 
 ###plot new distributions
 f, ax = plt.subplots(8, 7, figsize=(40, 40))
