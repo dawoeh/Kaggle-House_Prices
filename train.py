@@ -4,16 +4,17 @@ import matplotlib.pyplot as plt
 plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
 
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
-import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
 from sklearn.preprocessing import QuantileTransformer
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import GridSearchCV
 
+import xgboost as xgb
+import catboost as cbr
 
 #####import data
 train = pd.read_csv("train.csv")
@@ -24,6 +25,7 @@ test.name = 'test'
 #####Show data statistics
 print('***Initial Analysis***')
 print(train.describe())
+print(train.info())
 
 f, ax = plt.subplots(9, 9, figsize=(50, 50))
 l=1
@@ -65,8 +67,7 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 
 numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
-encode_list = ['GarageQual','GarageCond','GarageFinish','GarageType','Heating','HeatingQC','CentralAir','ExterCond','ExterQual','MSZoning','BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','Foundation','PavedDrive','Functional','Electrical','SaleType','SaleCondition','Fence','FireplaceQu','KitchenQual','LotConfig','LandSlope','Neighborhood','LandContour','LotShape','Condition1','Condition2','BldgType','HouseStyle','RoofStyle','RoofMatl','Exterior1st','Exterior2nd','MasVnrType']
-drop_list_columns = ['Utilities','PoolArea','TotRmsAbvGrd','Condition2','LandContour','Id','MiscVal','YrSold','LowQualFinSF','BsmtFinType1','BsmtFinType2','Street','MoSold','LandSlope','Exterior2nd','Foundation','SaleType','2ndBsmtFlr','1stFlrSF','2ndFlrSF','BsmtFinSF1','OverallQual','YearBuilt','YearRemodAdd']
+drop_list_columns = ['YearBuilt','1stFlrSF','2ndFlrSF','YearRemodAdd','BsmtFinSF1']
 quantile_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
@@ -194,12 +195,21 @@ for i in data:
 		k+=1
 	for j in numeric_list:
 		i[j] = pd.to_numeric(i[j])
-	label_encoder = preprocessing.LabelEncoder() 
-	for j in encode_list:
+	label_encoder = preprocessing.LabelEncoder()
+	if i.name == 'train':
+		mis_train = i.isnull().sum()
+		print('Columns with missing values in train after manual filling:')
+		print(mis_train[mis_train > 0])
+	if i.name == 'test':
+		mis_test = i.isnull().sum()
+		print('Columns with missing values in test after manual filling::')
+		print(mis_test[mis_test > 0])
+	for j in i.columns: ####fill missing values in left over columnt with mos frequent value
 		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
 		imputer.fit(i[[j]])
 		i[[j]]= imputer.transform(i[[j]])
-		i[j]= label_encoder.fit_transform(i[j])
+		if i.dtypes[j] == 'object': #####label encode all columns with str
+			i[j]= label_encoder.fit_transform(i[j])
 
 list_empty=train.columns[train.isnull().any()].tolist()
 missing = []
@@ -269,6 +279,7 @@ for i in data:
 			i.drop(col, axis=1, inplace=True)
 
 ###remove columns with low correlation to price
+print('\n***Remove features with low correlation to SalePrice and analyse correlations between remaining features***')
 drop_cutoff = []
 for col in train.columns:
 	if np.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
@@ -276,7 +287,34 @@ for col in train.columns:
 		train.drop(col, axis=1, inplace=True)
 		test.drop(col, axis=1, inplace=True)
 print('The following features were dropped due to low correlation:')
-print(drop_cutoff)
+print(*drop_cutoff, sep = '\n')
+
+###check for high correlation between features, remove worse feature when correlation higher than 0.8
+high_corr = []
+drop_corr = []
+for col1 in train.columns:
+	for col2 in train.columns:
+		if col1 == col2 or col1 == 'SalePrice' or col2 == 'SalePrice':
+			pass
+		else:
+			if np.sqrt((train[col1].corr(train[col2]))**2) > 0.6:
+				high_corr.append([col1, col2, train[col1].corr(train[col2])])
+			if np.sqrt((train[col1].corr(train[col2]))**2) > 0.8 and np.sqrt((train['SalePrice'].corr(train[col1]))**2) > np.sqrt((train['SalePrice'].corr(train[col2]))**2):
+				if col2 not in drop_corr:
+					drop_corr.append(col2)
+			elif np.sqrt((train[col1].corr(train[col2]))**2) > 0.8 and np.sqrt((train['SalePrice'].corr(train[col2]))**2) > np.sqrt((train['SalePrice'].corr(train[col1]))**2):
+				if col1 not in drop_corr:
+					drop_corr.append(col1)
+
+for col in drop_corr:
+	train.drop(col, axis=1, inplace=True)
+	test.drop(col, axis=1, inplace=True)
+
+print('\nThe follwoing features show a high correlation! Check whether one of them can  be removed.')
+print(*high_corr, sep = '\n')
+
+print('\nAutomatically removed:')
+print(*drop_corr, sep = '\n')
 
 ###plot new distributions
 f, ax = plt.subplots(8, 7, figsize=(40, 40))
@@ -305,8 +343,8 @@ X_train = train.drop("SalePrice", axis=1)
 Y_train = train["SalePrice"]
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
+print('\n***Performance of various models***')
 ######LinReg
-
 linreg = LinearRegression()
 linreg.fit(x_train, y_train)
 Y_pred = linreg.predict(x_test)
@@ -317,7 +355,7 @@ clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
 ##print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
-print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####Optimize Random Forest
 
@@ -357,9 +395,16 @@ plt.close
 #      'booster': ['gbtree'],
 #      'objective': ['reg:squarederror']
 # }
-# xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 3, verbose = 1)
+# xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 5, verbose = 1)
 # xg_reg_opt.fit(x_train, y_train)
 # print("Best parameters XGBoost: ",xg_reg_opt.best_params_)
 # Y_pred = xg_reg_opt.predict(x_test)
 # print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters XGBoost:  {'colsample_bytree': 0.475, 'learning_rate': 0.05, 'max_depth': 40, 'n_estimators': 200}
+
+####CatBoost
+cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
+cb_reg.fit(x_train,y_train,silent=True)
+Y_pred = cb_reg.predict(x_test)
+##print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
+print("Accuracy CatBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
