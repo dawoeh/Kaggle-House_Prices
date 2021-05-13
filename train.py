@@ -67,8 +67,8 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 
 numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
-drop_list_columns = ['YearBuilt','1stFlrSF','2ndFlrSF','YearRemodAdd','BsmtFinSF1']
-quantile_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
+drop_list_columns = ['YearBuilt','1stFlrSF','2ndFlrSF','YearRemodAdd','BsmtFinSF1','Id','BsmtFinSF2']
+continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
@@ -239,11 +239,11 @@ plt.savefig('graphs/heatmap_before.png')
 plt.close
 
 #####Histogramms numerical
-hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','PorchSF','Bath_count']
-f, ax = plt.subplots(4, 4, figsize=(20, 20))
+##hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','PorchSF','Bath_count']
+f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
-for i in hist_list:
-	ax = plt.subplot(4,4,l)
+for i in continuous_list:
+	ax = plt.subplot(4,5,l)
 	sn.histplot(data=train[i])
 	ax.set_title(i)
 	l+=1
@@ -254,13 +254,47 @@ plt.close
 ###transform numerical to obtain normal distribution
 quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
 for i in data:
-	for col in quantile_list:
+	for col in continuous_list:
 		if i.name == 'test' and col == 'SalePrice':
 			pass
 		elif i.name == 'train' and col == 'SalePrice':
 			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 		else:
 			i[col] = quantile.fit_transform(i.loc[:,col].values.reshape(-1, 1))
+
+f, ax = plt.subplots(4, 5, figsize=(20, 20))
+l=1
+for i in continuous_list:
+	ax = plt.subplot(4,5,l)
+	sn.histplot(data=train[i])
+	ax.set_title(i)
+	l+=1
+f.tight_layout()
+plt.savefig('graphs/hist_num_quantile.png')
+plt.close
+
+# f, ax = plt.subplots(4, 5, figsize=(20, 20))
+# l=1
+# for i in continuous_list:
+# 	ax = plt.subplot(4,5,l)
+# 	sn.boxplot(x=train[i], y=train["SalePrice"])
+# 	#sn.histplot(data=train[i])
+# 	ax.set_title(i)
+# 	l+=1
+# f.tight_layout()
+# plt.savefig('graphs/box_num_quantile.png')
+# plt.close
+
+f, ax = plt.subplots(4, 5, figsize=(20, 20))
+l=1
+for i in continuous_list:
+	ax = plt.subplot(4,5,l)
+	sn.boxplot(data=train[i])
+	ax.set_title(i)
+	l+=1
+plt.savefig('graphs/box_num_quantile.png')
+plt.close
+
 
 ####delete defined columns
 for i in data:
@@ -279,15 +313,16 @@ for i in data:
 			i.drop(col, axis=1, inplace=True)
 
 ###remove columns with low correlation to price
-print('\n***Remove features with low correlation to SalePrice and analyse correlations between remaining features***')
-drop_cutoff = []
-for col in train.columns:
-	if np.sqrt((train['SalePrice'].corr(train[col]))**2) < 0.1:
-		drop_cutoff.append([col, train['SalePrice'].corr(train[col])])
-		train.drop(col, axis=1, inplace=True)
-		test.drop(col, axis=1, inplace=True)
-print('The following features were dropped due to low correlation:')
-print(*drop_cutoff, sep = '\n')
+
+# print('\n***Remove features with low correlation to SalePrice and analyse correlations between remaining features***')
+# drop_cutoff = []
+# for col in train.columns:
+# 	if np.abs(train['SalePrice'].corr(train[col])) < 0.1:
+# 		drop_cutoff.append([col, train['SalePrice'].corr(train[col])])
+# 		train.drop(col, axis=1, inplace=True)
+# 		test.drop(col, axis=1, inplace=True)
+# print('The following features were dropped due to low correlation:')
+# print(*drop_cutoff, sep = '\n')
 
 ###check for high correlation between features, remove worse feature when correlation higher than 0.8
 high_corr = []
@@ -297,12 +332,12 @@ for col1 in train.columns:
 		if col1 == col2 or col1 == 'SalePrice' or col2 == 'SalePrice':
 			pass
 		else:
-			if np.sqrt((train[col1].corr(train[col2]))**2) > 0.6:
+			if np.abs(train[col1].corr(train[col2])) > 0.6:
 				high_corr.append([col1, col2, train[col1].corr(train[col2])])
-			if np.sqrt((train[col1].corr(train[col2]))**2) > 0.8 and np.sqrt((train['SalePrice'].corr(train[col1]))**2) > np.sqrt((train['SalePrice'].corr(train[col2]))**2):
+			if np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col1])) > np.abs(train['SalePrice'].corr(train[col2])):
 				if col2 not in drop_corr:
 					drop_corr.append(col2)
-			elif np.sqrt((train[col1].corr(train[col2]))**2) > 0.8 and np.sqrt((train['SalePrice'].corr(train[col2]))**2) > np.sqrt((train['SalePrice'].corr(train[col1]))**2):
+			elif np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
 				if col1 not in drop_corr:
 					drop_corr.append(col1)
 
@@ -317,10 +352,10 @@ print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
 
 ###plot new distributions
-f, ax = plt.subplots(8, 7, figsize=(40, 40))
+f, ax = plt.subplots(8, 8, figsize=(40, 40))
 l=1
 for col in train.columns:
-	ax = plt.subplot(8,7,l)
+	ax = plt.subplot(8,8,l)
 	sn.histplot(data=train[col],kde=True)
 	ax.set_title(col)
 	l+=1
