@@ -67,7 +67,7 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 
 numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
-drop_list_columns = ['YearBuilt','1stFlrSF','2ndFlrSF','YearRemodAdd','BsmtFinSF1','Id','BsmtFinSF2']
+drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2', 'Utilities','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
 continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
@@ -143,11 +143,6 @@ for i in data:
 					i.at[k, 'BsmtHalfBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
 				elif i.at[k, 'TotalBsmtSF'] == 0 and h == 'BsmtHalfBath':
 					i.at[k, 'BsmtHalfBath'] = 0
-		for h in porch_list:
-			if i.at[k, h] > 0:
-				i.at[k, h] = 1
-			else:
-				i.at[k, h] = 0
 		for h in bmst_list:
 			if i.loc[k,'Foundation'] == 'Slab' and not (h == 'BsmtUnfSF' or h == 'BsmtFinSF1'):
 				i.at[k, h] = 'Abs'
@@ -173,15 +168,20 @@ for i in data:
 				i.at[k, 'QualitySum'] += 1
 		if i.at[k, 'TotalBsmtSF'] > 0:
 			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']
-		i.at[k, 'SinceRenov'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']	
-		i.at[k, 'Age'] = i.at[k, 'YrSold'] - i.at[k, 'YearBuilt']	
+		i.at[k, 'SinceRenov'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']
+		if i.at[k, 'SinceRenov'] < 0:
+			i.at[k, 'SinceRenov'] = 0
+		i.at[k, 'Age'] = i.at[k, 'YrSold'] - i.at[k, 'YearBuilt']
+		if i.at[k, 'Age'] < 0:
+			i.at[k, 'Age'] = 0
 		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch'] + i.at[k, 'WoodDeckSF']
+		for h in porch_list:
+			if i.at[k, h] > 0:
+				i.at[k, h] = 1
+			else:
+				i.at[k, h] = 0
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
 		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,"LotArea"])
-		if i.at[k, 'WoodDeckSF'] > 0:
-			i.at[k, 'WoodDeck'] = 1
-		else:
-			i.at[k, 'WoodDeck'] = 0
 		if pd.isna(i.at[k, 'MSZoning']): #####fill missing values based on 
 			i.at[k, 'MSZoning'] = 'C (all)'
 			if i.loc[k,'YearBuilt'] > 1938:
@@ -253,14 +253,16 @@ plt.close
 
 ###transform numerical to obtain normal distribution
 quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
+transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','GrLivArea','1stFlrSF','GarageArea','PorchSF']
 for i in data:
-	for col in continuous_list:
+	for col in transform_list:
 		if i.name == 'test' and col == 'SalePrice':
 			pass
 		elif i.name == 'train' and col == 'SalePrice':
 			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 		else:
-			i[col] = quantile.fit_transform(i.loc[:,col].values.reshape(-1, 1))
+			#i[col] = quantile.fit_transform(i.loc[:,col].values.reshape(-1, 1))
+			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
@@ -272,18 +274,6 @@ for i in continuous_list:
 f.tight_layout()
 plt.savefig('graphs/hist_num_quantile.png')
 plt.close
-
-# f, ax = plt.subplots(4, 5, figsize=(20, 20))
-# l=1
-# for i in continuous_list:
-# 	ax = plt.subplot(4,5,l)
-# 	sn.boxplot(x=train[i], y=train["SalePrice"])
-# 	#sn.histplot(data=train[i])
-# 	ax.set_title(i)
-# 	l+=1
-# f.tight_layout()
-# plt.savefig('graphs/box_num_quantile.png')
-# plt.close
 
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
@@ -304,8 +294,7 @@ for i in data:
 		i.drop(col, axis=1, inplace=True)
 	for col in garage_list:
 		i.drop(col, axis=1, inplace=True)
-	for col in porch_list:
-		i.drop(col, axis=1, inplace=True)
+	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 	for col in quality_sum_list:
 		if (col == 'GarageQual' or col == 'GarageCond'):
 			pass
@@ -325,6 +314,7 @@ for i in data:
 # print(*drop_cutoff, sep = '\n')
 
 ###check for high correlation between features, remove worse feature when correlation higher than 0.8
+###PREVENT DUPLICATES IN high_corr!!
 high_corr = []
 drop_corr = []
 for col1 in train.columns:
@@ -352,10 +342,10 @@ print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
 
 ###plot new distributions
-f, ax = plt.subplots(8, 8, figsize=(40, 40))
+f, ax = plt.subplots(8, 9, figsize=(40, 40))
 l=1
 for col in train.columns:
-	ax = plt.subplot(8,8,l)
+	ax = plt.subplot(8,9,l)
 	sn.histplot(data=train[col],kde=True)
 	ax.set_title(col)
 	l+=1
@@ -436,6 +426,7 @@ plt.close
 # Y_pred = xg_reg_opt.predict(x_test)
 # print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters XGBoost:  {'colsample_bytree': 0.475, 'learning_rate': 0.05, 'max_depth': 40, 'n_estimators': 200}
+## Best parameters XGBoost:  {'booster': 'gbtree', 'colsample_bytree': 0.3, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 1, 'n_estimators': 1000, 'objective': 'reg:squarederror'}
 
 ####CatBoost
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
