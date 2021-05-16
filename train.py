@@ -252,7 +252,7 @@ plt.savefig('graphs/hist_num.png')
 plt.close
 
 ###transform numerical to obtain normal distribution
-quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
+#quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
 transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','GrLivArea','1stFlrSF','GarageArea','PorchSF']
 for i in data:
 	for col in transform_list:
@@ -314,22 +314,29 @@ for i in data:
 # print(*drop_cutoff, sep = '\n')
 
 ###check for high correlation between features, remove worse feature when correlation higher than 0.8
-###PREVENT DUPLICATES IN high_corr!!
 high_corr = []
 drop_corr = []
+col1_list = []
+col2_list = []
 for col1 in train.columns:
 	for col2 in train.columns:
+		col2_list.append(col2)
 		if col1 == col2 or col1 == 'SalePrice' or col2 == 'SalePrice':
 			pass
 		else:
-			if np.abs(train[col1].corr(train[col2])) > 0.6:
-				high_corr.append([col1, col2, train[col1].corr(train[col2])])
-			if np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col1])) > np.abs(train['SalePrice'].corr(train[col2])):
-				if col2 not in drop_corr:
-					drop_corr.append(col2)
-			elif np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
-				if col1 not in drop_corr:
-					drop_corr.append(col1)
+			if ((col1 in col2_list) & (col2 in col1_list)):
+				pass
+			else:
+				if np.abs(train[col1].corr(train[col2])) > 0.6:
+					high_corr.append([col1, col2, train[col1].corr(train[col2])])
+				if np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col1])) > np.abs(train['SalePrice'].corr(train[col2])):
+					if col2 not in drop_corr:
+						drop_corr.append(col2)
+				elif np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
+					if col1 not in drop_corr:
+						drop_corr.append(col1)
+		col2_list.append(col2)
+	col1_list.append(col1)
 
 for col in drop_corr:
 	train.drop(col, axis=1, inplace=True)
@@ -340,6 +347,32 @@ print(*high_corr, sep = '\n')
 
 print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
+
+###check skewness of transformed features
+cont_skew = []
+for col in transform_list:
+	try:
+		cont_skew.append([col, train[col].skew()])
+	except:
+		pass
+print('\nSkewness of continuous features:')
+print(*cont_skew, sep = '\n')
+
+###check for outliers
+cont_outlier = []
+for col in transform_list:
+	try:
+		Q1, Q3 = np.percentile(train[col], 25), np.percentile(train[col], 75)
+		IQR = Q3 - Q1
+		cut_off = IQR * 3
+		lower = Q1 - cut_off 
+		upper = Q3 + cut_off
+		outliers = [x for x in train[col] if x < lower or x > upper]
+		cont_outlier.append([col, len(outliers)])
+	except:
+		pass
+print('\nOutliers in continuous features (3*IQR):')
+print(*cont_outlier, sep = '\n')
 
 ###plot new distributions
 f, ax = plt.subplots(8, 9, figsize=(40, 40))
