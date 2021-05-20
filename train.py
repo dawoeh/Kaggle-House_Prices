@@ -68,7 +68,7 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
 drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2', 'Utilities','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
-continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','GrLivArea','MasVnrArea','BsmtUnfSF','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
+continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
@@ -253,7 +253,7 @@ plt.close
 
 ###transform numerical to obtain normal distribution
 #quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
-transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','GrLivArea','1stFlrSF','GarageArea','PorchSF']
+transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','1stFlrSF','GarageArea','PorchSF']
 for i in data:
 	for col in transform_list:
 		if i.name == 'test' and col == 'SalePrice':
@@ -284,7 +284,6 @@ for i in continuous_list:
 	l+=1
 plt.savefig('graphs/box_num_quantile.png')
 plt.close
-
 
 ####delete defined columns
 for i in data:
@@ -374,6 +373,33 @@ for col in transform_list:
 print('\nOutliers in continuous features (3*IQR):')
 print(*cont_outlier, sep = '\n')
 
+f, ax = plt.subplots(4, 3, figsize=(20, 15))
+l=1
+for col in continuous_list:
+	ax = plt.subplot(4,3,l)
+	try:
+		sn.scatterplot(x=col,y='SalePrice',data=train)
+		ax.set_title(col)
+		l+=1
+	except:
+		pass
+f.tight_layout()
+plt.savefig('graphs/scatter_price_cont_final.png')
+plt.close
+
+#####Remove max-outliers in continuous features
+outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
+outlier_row = []
+for col in outlier_col:
+	if train[col].idxmax() in outlier_row:
+		pass
+	else:
+		outlier_row.append(train[col].idxmax())
+print('\nRows with max value outliers:')
+print(outlier_row)
+train.drop(train.index[outlier_row], axis=0, inplace=True)
+train.drop(train['GrLivArea'].idxmax(), axis=0, inplace=True) ###include in upper loop to remove second highest too
+
 ###plot new distributions
 f, ax = plt.subplots(8, 9, figsize=(40, 40))
 l=1
@@ -409,7 +435,7 @@ Y_pred = linreg.predict(x_test)
 ##print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 #####Random Forest
-clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
+clf_simple=RandomForestRegressor(n_estimators= 100, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
 ##print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
@@ -445,11 +471,11 @@ plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
 ####Optimized XGBoost
 # param_grid = {
-#      'colsample_bytree': np.linspace(0.3, 1, 4),
-#      'n_estimators':[100,500,1000],
-#      'max_depth': [3, 5, 7, 10],
-#      'learning_rate': [0.05, 0.1,0.15],
-#      'min_child_weight': [1,3,6],
+#      'colsample_bytree': np.linspace(0.2, 1, 4),
+#      'n_estimators':[500,1000,1500],
+#      'max_depth': [4, 5, 6, 8],
+#      'learning_rate': [0.05, 0.08,0.10],
+#      'min_child_weight': [1,3,5],
 #      'booster': ['gbtree'],
 #      'objective': ['reg:squarederror']
 # }
