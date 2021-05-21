@@ -239,7 +239,6 @@ plt.savefig('graphs/heatmap_before.png')
 plt.close
 
 #####Histogramms numerical
-##hist_list = ['LotFrontage','LotArea','MasVnrArea','BsmtFinSF1','TotalBsmtSF','1stFlrSF','2ndFlrSF','GrLivArea','LowQualFinSF','GarageArea','PorchSF','Bath_count']
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
 for i in continuous_list:
@@ -395,6 +394,8 @@ for col in outlier_col:
 		pass
 	else:
 		outlier_row.append(train[col].idxmax())
+print(train['GrLivArea'].nlargest(2))
+#print(train['GrLivArea'].nlargest(2).iloc[1].index) ###extract row and include in loop
 print('\nRows with max value outliers:')
 print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
