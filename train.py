@@ -394,12 +394,17 @@ for col in outlier_col:
 		pass
 	else:
 		outlier_row.append(train[col].idxmax())
-print(train['GrLivArea'].nlargest(2))
-#print(train['GrLivArea'].nlargest(2).iloc[1].index) ###extract row and include in loop
+	if col in ('GrLivArea'):
+		print('\nMaximal values of %s:' % col)
+		print(train[col].nlargest(2))
+		second_max = train.loc[train[col] == train[col].nlargest(2).iloc[1]].index[0]
+		if second_max in outlier_row:
+			pass
+		else:
+			outlier_row.append(second_max)
 print('\nRows with max value outliers:')
 print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
-train.drop(train['GrLivArea'].idxmax(), axis=0, inplace=True) ###include in upper loop to remove second highest too
 
 ###plot new distributions
 f, ax = plt.subplots(8, 9, figsize=(40, 40))
@@ -433,38 +438,34 @@ print('\n***Performance of various models***')
 linreg = LinearRegression()
 linreg.fit(x_train, y_train)
 Y_pred = linreg.predict(x_test)
-##print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 #####Random Forest
-clf_simple=RandomForestRegressor(n_estimators= 100, random_state=666)
+clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
 clf_simple.fit(x_train,y_train)
 Y_pred=clf_simple.predict(x_test)
-##print("Accuracy Simple Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####Optimize Random Forest
-
 # clf=RandomForestRegressor(random_state=666)
 # param_grid = { 
-#     'n_estimators': [200],
-#     'min_samples_split': [2, 5, 10, 15],
-# 	'min_samples_leaf': [3, 5, 8, 12],
-#     'max_features': ['auto', 'sqrt', 'log2', None],
-#     'max_depth' : [5, 10, 20, 30],
-#     'criterion' :['gini', 'entropy'] 
+#     'n_estimators': [200, 500, 1000],
+#     'min_samples_split': [2, 4, 6],
+# 	'min_samples_leaf': [3, 5, 8],
+#     'max_features': ['auto'], ##, 'sqrt', 'log2', None
+#     'max_depth' : [5, 7, 10],
+#     'criterion' :['mse', 'entropy', 'gini'] 
 # }
-# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1)
+# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1, n_jobs = 4)
 # CV_clf.fit(x_train, y_train)
 # print('Optimized Random Forest Classifier:',CV_clf.best_params_)
 # Y_pred=CV_clf.predict(x_test)
 # print("Accuracy Optimized Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
+# Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
 
 ####XGBoost
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
-##print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 f,ax = plt.subplots(figsize=(10,10))
 xgb.plot_importance(xg_reg,ax=ax,color='red')
@@ -492,5 +493,4 @@ plt.close
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
 cb_reg.fit(x_train,y_train,silent=True)
 Y_pred = cb_reg.predict(x_test)
-##print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(y_test, Y_pred)))
 print("Accuracy CatBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
