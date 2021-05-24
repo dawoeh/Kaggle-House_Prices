@@ -12,6 +12,10 @@ from sklearn.preprocessing import QuantileTransformer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import KFold
+
+from skopt import BayesSearchCV
+from skopt.space import Real
 
 import xgboost as xgb
 import catboost as cbr
@@ -463,7 +467,7 @@ print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(n
 # Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
 
 ####XGBoost
-xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
+xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
 print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -471,23 +475,55 @@ f,ax = plt.subplots(figsize=(10,10))
 xgb.plot_importance(xg_reg,ax=ax,color='red')
 plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
+
 ####Optimized XGBoost
-# param_grid = {
-#      'colsample_bytree': np.linspace(0.2, 1, 4),
-#      'n_estimators':[500,1000,1500],
-#      'max_depth': [4, 5, 6, 8],
-#      'learning_rate': [0.05, 0.08,0.10],
-#      'min_child_weight': [1,3,5],
-#      'booster': ['gbtree'],
-#      'objective': ['reg:squarederror']
-# }
-# xg_reg_opt = GridSearchCV(estimator = xgb.XGBRegressor(), param_grid = param_grid, scoring = 'neg_mean_squared_error', cv = 5, verbose = 1)
-# xg_reg_opt.fit(x_train, y_train)
-# print("Best parameters XGBoost: ",xg_reg_opt.best_params_)
-# Y_pred = xg_reg_opt.predict(x_test)
-# print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost:  {'colsample_bytree': 0.475, 'learning_rate': 0.05, 'max_depth': 40, 'n_estimators': 200}
-## Best parameters XGBoost:  {'booster': 'gbtree', 'colsample_bytree': 0.3, 'learning_rate': 0.05, 'max_depth': 3, 'min_child_weight': 1, 'n_estimators': 1000, 'objective': 'reg:squarederror'}
+estimator = xgb.XGBRegressor(
+    n_jobs=-1,
+    objective="reg:squarederror",
+    eval_metric="rmse",
+    verbosity=0,
+    booster='gbtree',
+)
+search_space = {
+    "learning_rate": (Real(0.01, 1.0, "log-uniform")),
+    "min_child_weight": (0, 10),
+    "max_depth": (3, 20),
+    "colsample_bytree": (Real(0.01, 1.0, "log-uniform")),
+    "min_child_weight": (0, 5),
+    "n_estimators": (5, 5000),
+}
+cv = KFold(n_splits=3, shuffle=True)
+n_iterations = 50
+bayes_cv_tuner = BayesSearchCV(
+    estimator=estimator,
+    search_spaces=search_space,
+    scoring='neg_mean_squared_error',
+    cv=cv,
+    n_jobs=-1,
+    n_iter=n_iterations,
+    verbose=0,
+    refit=True,
+)
+def print_status(optimal_result):
+    """Shows the best parameters found and accuracy attained of the search so far."""
+    models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
+    best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
+    print(
+        "Model #{}\nBest so far: {}\nBest parameters so far: {}\n".format(
+            len(models_tested),
+            np.round(bayes_cv_tuner.best_score_, 4),
+            bayes_cv_tuner.best_params_,
+        )
+    )
+    clf_type = bayes_cv_tuner.estimator.__class__.__name__
+    models_tested.to_csv(clf_type + "_cv_results_summary.csv")
+
+result = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+print("\nOptimized XGBoost Parameters:"
+print(result.best_params_)
+Y_pred = result.predict(x_test)
+print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Best parameters XGBoost:  ('colsample_bytree', 0.37237959535915405), ('learning_rate', 0.011107315438166876), ('max_depth', 12), ('min_child_weight', 5), ('n_estimators', 4251)
 
 ####CatBoost
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
