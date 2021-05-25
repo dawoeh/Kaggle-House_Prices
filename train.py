@@ -450,21 +450,50 @@ Y_pred=clf_simple.predict(x_test)
 print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####Optimize Random Forest
-# clf=RandomForestRegressor(random_state=666)
-# param_grid = { 
-#     'n_estimators': [200, 500, 1000],
-#     'min_samples_split': [2, 4, 6],
-# 	'min_samples_leaf': [3, 5, 8],
-#     'max_features': ['auto'], ##, 'sqrt', 'log2', None
-#     'max_depth' : [5, 7, 10],
-#     'criterion' :['mse', 'entropy', 'gini'] 
-# }
-# CV_clf = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 5, scoring = 'neg_mean_squared_error', verbose = 1, n_jobs = 4)
-# CV_clf.fit(x_train, y_train)
-# print('Optimized Random Forest Classifier:',CV_clf.best_params_)
-# Y_pred=CV_clf.predict(x_test)
-# print("Accuracy Optimized Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-# Optimized Random Forest Classifier: {'criterion': 'gini', 'max_depth': 20, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 200}
+estimator = RandomForestRegressor(
+	n_jobs=-1,
+	criterion="mse",
+	random_state=666,
+)
+search_space = {
+	"min_samples_split": (2, 10),
+	"min_samples_leaf": (2, 10),
+	"max_depth": (3, 15),
+	'max_features': ['auto', 'sqrt', 'log2', None], ##
+	"n_estimators": (5, 5000),
+}
+cv = KFold(n_splits=3, shuffle=True)
+n_iterations = 30
+bayes_cv_tuner = BayesSearchCV(
+	estimator=estimator,
+	search_spaces=search_space,
+	scoring='neg_mean_squared_error',
+	cv=cv,
+	n_jobs=-1,
+	n_iter=n_iterations,
+	verbose=0,
+	refit=True,
+)
+def print_status(optimal_result):
+	"""Shows the best parameters found and accuracy attained of the search so far."""
+	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
+	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
+	print(
+		"Model #{}\nBest so far: {}\nBest parameters so far: {}\n".format(
+			len(models_tested),
+			np.round(bayes_cv_tuner.best_score_, 5),
+			bayes_cv_tuner.best_params_,
+		)
+	)
+	clf_type = bayes_cv_tuner.estimator.__class__.__name__
+	models_tested.to_csv(clf_type + "_cv_results_summary.csv")
+
+result = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+print("\nOptimized Random Forest Parameters:")
+print(result.best_params_)
+Y_pred = result.predict(x_test)
+print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+# Optimized Random Forest Classifier: Optimized Random Forest Parameters: OrderedDict([('max_depth', 10), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 4), ('n_estimators', 4926)])
 
 ####XGBoost
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
@@ -493,7 +522,7 @@ search_space = {
     "n_estimators": (5, 5000),
 }
 cv = KFold(n_splits=3, shuffle=True)
-n_iterations = 50
+n_iterations = 30
 bayes_cv_tuner = BayesSearchCV(
     estimator=estimator,
     search_spaces=search_space,
@@ -504,22 +533,9 @@ bayes_cv_tuner = BayesSearchCV(
     verbose=0,
     refit=True,
 )
-def print_status(optimal_result):
-    """Shows the best parameters found and accuracy attained of the search so far."""
-    models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
-    best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
-    print(
-        "Model #{}\nBest so far: {}\nBest parameters so far: {}\n".format(
-            len(models_tested),
-            np.round(bayes_cv_tuner.best_score_, 4),
-            bayes_cv_tuner.best_params_,
-        )
-    )
-    clf_type = bayes_cv_tuner.estimator.__class__.__name__
-    models_tested.to_csv(clf_type + "_cv_results_summary.csv")
 
 result = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-print("\nOptimized XGBoost Parameters:"
+print("\nOptimized XGBoost Parameters:")
 print(result.best_params_)
 Y_pred = result.predict(x_test)
 print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
