@@ -21,9 +21,9 @@ import xgboost as xgb
 import catboost as cbr
 
 #####import data
-train = pd.read_csv("train.csv")
+train = pd.read_csv('train.csv')
 train.name = 'train'
-test = pd.read_csv("test.csv")
+test = pd.read_csv('test.csv')
 test.name = 'test'
 
 #####Show data statistics
@@ -74,13 +74,13 @@ numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
 drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2', 'Utilities','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
 continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
-quality_sum_list =['ExterQual','ExterCond','BsmtQual','BsmtCond','HeatingQC','KitchenQual','FireplaceQu','GarageQual','GarageCond','PoolQC']
+quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
 
 ####feature engineering; fill missing values
-
+check = 0
 for i in data:
 	k = 0
 	for j in i['Id']:
@@ -136,7 +136,7 @@ for i in data:
 		if pd.isna(i.at[k, 'TotalBsmtSF']):
 			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
 		if pd.isna(i.at[k, 'LotFrontage']):  
-			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,"LotArea"]) * combine_data.at["LotFrontage"].mean() / np.sqrt(combine_data.at["LotArea"].mean())
+			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
 		for h in bath_list:
 			if pd.isna(i.at[k, h]):
 				if i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtFullBath':
@@ -172,6 +172,18 @@ for i in data:
 				i.at[k, 'QualitySum'] += 1
 		if i.at[k, 'TotalBsmtSF'] > 0:
 			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']
+		if i.at[k, 'TotalBsmtSF'] == 0:
+			i.at[k, 'BsmtFinType1'] = 'None'
+			i.at[k, 'BsmtFinType2'] = 'None'
+			i.at[k, 'BsmtExposure'] = 'None'
+			i.at[k, 'BsmtQual'] = 'None'
+			i.at[k, 'BsmtCond'] = 'None'
+		if pd.isna(i.at[k, 'TotalBsmtSF']):
+			i.at[k, 'BsmtFinType1'] = 'None'
+			i.at[k, 'BsmtFinType2'] = 'None'
+			i.at[k, 'BsmtExposure'] = 'None'
+			i.at[k, 'BsmtQual'] = 'None'
+			i.at[k, 'BsmtCond'] = 'None'
 		i.at[k, 'SinceRenov'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']
 		if i.at[k, 'SinceRenov'] < 0:
 			i.at[k, 'SinceRenov'] = 0
@@ -185,7 +197,7 @@ for i in data:
 			else:
 				i.at[k, h] = 0
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
-		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,"LotArea"])
+		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,'LotArea'])
 		if pd.isna(i.at[k, 'MSZoning']): #####fill missing values based on 
 			i.at[k, 'MSZoning'] = 'C (all)'
 			if i.loc[k,'YearBuilt'] > 1938:
@@ -199,14 +211,19 @@ for i in data:
 		k+=1
 	for j in numeric_list:
 		i[j] = pd.to_numeric(i[j])
+	print(len(i.columns))
+	for col in quality_sum_list:
+		i = pd.concat([i,pd.get_dummies(i[col], prefix=col)],axis=1)
+		i.drop([col],axis=1, inplace=True)
+	print(len(i.columns))
 	label_encoder = preprocessing.LabelEncoder()
-	if i.name == 'train':
+	if check == 0:
 		mis_train = i.isnull().sum()
 		print('Columns with missing values in train after manual filling:')
-		print(mis_train[mis_train > 0])
-	if i.name == 'test':
+		print(mis_train[mis_train > 0])		
+	if check == 1:
 		mis_test = i.isnull().sum()
-		print('Columns with missing values in test after manual filling::')
+		print('Columns with missing values in test after manual filling:')
 		print(mis_test[mis_test > 0])
 	for j in i.columns: ####fill missing values in left over columnt with mos frequent value
 		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
@@ -214,6 +231,9 @@ for i in data:
 		i[[j]]= imputer.transform(i[[j]])
 		if i.dtypes[j] == 'object': #####label encode all columns with str
 			i[j]= label_encoder.fit_transform(i[j])
+	check += 1
+
+print(train.info())
 
 list_empty=train.columns[train.isnull().any()].tolist()
 missing = []
@@ -433,8 +453,8 @@ plt.close
 ##print(train.corr()['SalePrice'].sort_values())
 
 #####define training and test sets
-X_train = train.drop("SalePrice", axis=1)
-Y_train = train["SalePrice"]
+X_train = train.drop('SalePrice', axis=1)
+Y_train = train['SalePrice']
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
 print('\n***Performance of various models***')
@@ -442,107 +462,145 @@ print('\n***Performance of various models***')
 linreg = LinearRegression()
 linreg.fit(x_train, y_train)
 Y_pred = linreg.predict(x_test)
-print("Accuracy Linear Regression (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 #####Random Forest
-clf_simple=RandomForestRegressor(n_estimators= 500, random_state=666)
-clf_simple.fit(x_train,y_train)
-Y_pred=clf_simple.predict(x_test)
-print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+rf_reg=RandomForestRegressor(n_estimators= 500, random_state=666)
+rf_reg.fit(x_train,y_train)
+Y_pred=rf_reg.predict(x_test)
+print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-#####Optimize Random Forest
-estimator = RandomForestRegressor(
-	n_jobs=-1,
-	criterion="mse",
-	random_state=666,
-)
-search_space = {
-	"min_samples_split": (2, 10),
-	"min_samples_leaf": (2, 10),
-	"max_depth": (3, 15),
-	'max_features': ['auto', 'sqrt', 'log2', None], ##
-	"n_estimators": (5, 5000),
-}
-cv = KFold(n_splits=3, shuffle=True)
-n_iterations = 30
-bayes_cv_tuner = BayesSearchCV(
-	estimator=estimator,
-	search_spaces=search_space,
-	scoring='neg_mean_squared_error',
-	cv=cv,
-	n_jobs=-1,
-	n_iter=n_iterations,
-	verbose=0,
-	refit=True,
-)
-def print_status(optimal_result):
-	"""Shows the best parameters found and accuracy attained of the search so far."""
-	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
-	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
-	print(
-		"Model #{}\nBest so far: {}\nBest parameters so far: {}\n".format(
-			len(models_tested),
-			np.round(bayes_cv_tuner.best_score_, 5),
-			bayes_cv_tuner.best_params_,
-		)
-	)
-	clf_type = bayes_cv_tuner.estimator.__class__.__name__
-	models_tested.to_csv(clf_type + "_cv_results_summary.csv")
+#####Optimized Random Forest
+# estimator = RandomForestRegressor(
+# 	n_jobs=-1,
+# 	criterion='mse',
+# 	random_state=666,
+# )
+# 
+# search_space = {
+# 	'min_samples_split': (2, 10),
+# 	'min_samples_leaf': (2, 10),
+# 	'max_depth': (3, 15),
+# 	'max_features': ['auto', 'sqrt', 'log2', None], ##
+# 	'n_estimators': (5, 5000),
+# }
+# 
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 100
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
 
-result = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-print("\nOptimized Random Forest Parameters:")
-print(result.best_params_)
-Y_pred = result.predict(x_test)
-print("Accuracy Random Forest (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+# rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# print('\nOptimized Random Forest Parameters:')
+# print(.best_params_)
+# Y_pred = rf_reg_opt.predict(x_test)
+# print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 # Optimized Random Forest Classifier: Optimized Random Forest Parameters: OrderedDict([('max_depth', 10), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 4), ('n_estimators', 4926)])
 
 ####XGBoost
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
-print("Accuracy XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+print('Accuracy XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 f,ax = plt.subplots(figsize=(10,10))
 xgb.plot_importance(xg_reg,ax=ax,color='red')
 plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
 
 ####Optimized XGBoost
-estimator = xgb.XGBRegressor(
-    n_jobs=-1,
-    objective="reg:squarederror",
-    eval_metric="rmse",
-    verbosity=0,
-    booster='gbtree',
-)
-search_space = {
-    "learning_rate": (Real(0.01, 1.0, "log-uniform")),
-    "min_child_weight": (0, 10),
-    "max_depth": (3, 20),
-    "colsample_bytree": (Real(0.01, 1.0, "log-uniform")),
-    "min_child_weight": (0, 5),
-    "n_estimators": (5, 5000),
-}
-cv = KFold(n_splits=3, shuffle=True)
-n_iterations = 30
-bayes_cv_tuner = BayesSearchCV(
-    estimator=estimator,
-    search_spaces=search_space,
-    scoring='neg_mean_squared_error',
-    cv=cv,
-    n_jobs=-1,
-    n_iter=n_iterations,
-    verbose=0,
-    refit=True,
-)
+# estimator = xgb.XGBRegressor(
+#     n_jobs=-1,
+#     objective='reg:squarederror',
+#     eval_metric='rmse',
+#     verbosity=0,
+#     booster='gbtree',
+# )
+# 
+# search_space = {
+#     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
+#     'min_child_weight': (0, 10),
+#     'max_depth': (3, 20),
+#     'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
+#     'min_child_weight': (0, 5),
+#     'n_estimators': (5, 5000),
+# }
+# 
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 100
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
 
-result = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-print("\nOptimized XGBoost Parameters:")
-print(result.best_params_)
-Y_pred = result.predict(x_test)
-print("Accuracy Optimized XGBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost:  ('colsample_bytree', 0.37237959535915405), ('learning_rate', 0.011107315438166876), ('max_depth', 12), ('min_child_weight', 5), ('n_estimators', 4251)
+# xg_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# print('\nOptimized XGBoost Parameters:')
+# print(xg_reg_opt.best_params_)
+# Y_pred = xg_reg_opt.predict(x_test)
+# print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Best parameters XGBoost: ('colsample_bytree', 0.18258981575390182), ('learning_rate', 0.017637427180919204), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 2928)
 
 ####CatBoost
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
 cb_reg.fit(x_train,y_train,silent=True)
 Y_pred = cb_reg.predict(x_test)
-print("Accuracy CatBoost (RMSLE):",np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+####Optimized CatBoost
+# estimator = cbr.CatBoostRegressor(
+#     loss_function = 'MAE',
+#     eval_metric = 'MSLE',
+#     silent=True,
+# )
+
+# search_space = {
+#     'learning_rate': (Real(0.01, 0.3, 'log-uniform')),
+#     'max_depth': (3, 16),
+#     'l2_leaf_reg': (1, 30),
+#     'iterations': (20, 2000),
+# }
+
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
+
+# def print_status(optimal_result):
+# 	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
+# 	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
+# 	print(
+# 		'Model #{}\nBest so far: {}\nBest parameters so far: {}\n'.format(
+# 			len(models_tested),
+# 			np.round(bayes_cv_tuner.best_score_, 5),
+# 			bayes_cv_tuner.best_params_,
+# 		)
+# 	)
+# 	clf_type = bayes_cv_tuner.estimator.__class__.__name__
+# 	models_tested.to_csv(clf_type + '_cv_results_summary.csv')
+
+# cb_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# print('\nOptimized CatBoost Parameters:')
+# print(cb_reg_opt.best_params_)
+# Y_pred = cb_reg_opt.predict(x_test)
+# print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+###Best parameters: ('iterations', 1875), ('l2_leaf_reg', 30), ('learning_rate', 0.022068113971935165), ('max_depth', 3)
