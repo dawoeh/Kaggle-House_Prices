@@ -8,7 +8,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
-from sklearn.preprocessing import QuantileTransformer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
@@ -19,6 +18,19 @@ from skopt.space import Real
 
 import xgboost as xgb
 import catboost as cbr
+
+def print_status(optimal_result):
+	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
+	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
+	print(
+		'Model #{}\nBest so far: {}\nBest parameters so far: {}\n'.format(
+			len(models_tested),
+			np.round(bayes_cv_tuner.best_score_, 5),
+			bayes_cv_tuner.best_params_,
+		)
+	)
+	clf_type = bayes_cv_tuner.estimator.__class__.__name__
+	models_tested.to_csv(clf_type + '_cv_results_summary.csv')
 
 #####import data
 train = pd.read_csv('train.csv')
@@ -70,30 +82,24 @@ print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lam
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 
-numeric_list = ['Alley','Street','MiscFeature','Pool','2ndFlr']
-drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2', 'Utilities','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
+numeric_list = ['MiscFeature','Pool','2ndFlr']
+drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
 continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
+hot_encode_list = ['MSZoning','Alley', 'Street', 'LotShape', 'Utilities', 'LotConfig', 'LandSlope', 'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating', 'Electrical', 'GarageType', 'GarageFinish', 'SaleCondition', 'Fence']
+hot_encode_list.extend(quality_sum_list)
 
 ####feature engineering; fill missing values
 check = 0
 for i in data:
 	k = 0
-	for j in i['Id']:
-		if i.loc[k,'Alley'] == 'Grvl':
-			i.at[k,'Alley'] = 1
-		elif i.loc[k,'Alley'] == 'Pave':
-			i.at[k,'Alley'] = 2
-		else:
-			i.at[k,'Alley'] = 0
-		if i.loc[k,'Street'] == 'Grvl':
-			i.at[k,'Street'] = 1
-		elif i.loc[k,'Street'] == 'Pave':
-			i.at[k,'Street'] = 2
+	while k < len(i):
+		if pd.isna(i.at[k, 'Alley']):
+			i.at[k,'Alley'] = 'None'
 		if pd.isna(i.at[k, 'PoolQC']):
 			i.at[k,'PoolQC'] = 'Abs'
 		if i.loc[k,'PoolArea'] > 0:
@@ -122,13 +128,13 @@ for i in data:
 				i.at[k, 'MasVnrArea'] = 0
 		if pd.isna(i.at[k, 'LotFrontage']): ######no strong correlation with any other feature, fill with data mean
 			i.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
-		for h in garage_list:
-			if h == 'GarageYrBlt':
+		for col in garage_list:
+			if col == 'GarageYrBlt':
 				if pd.isna(i.at[k, 'GarageYrBlt']):
 					i.at[k, 'GarageYrBlt'] = 0
 			else:
-				if pd.isna(i.at[k, h]) and not h == 'GarageArea':
-					i.at[k, h] = 'Abs'
+				if pd.isna(i.at[k, col]) and not col == 'GarageArea':
+					i.at[k, col] = 'Abs'
 		if pd.isna(i.at[k, 'GarageArea']):
 			i.at[k, 'GarageArea'] = i.loc[i['GarageArea'] > 0, 'GarageArea'].mean()
 		if pd.isna(i.at[k, 'GarageCars']):
@@ -137,19 +143,19 @@ for i in data:
 			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
 		if pd.isna(i.at[k, 'LotFrontage']):  
 			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
-		for h in bath_list:
-			if pd.isna(i.at[k, h]):
-				if i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtFullBath':
+		for col in bath_list:
+			if pd.isna(i.at[k, col]):
+				if i.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtFullBath':
 					i.at[k, 'BsmtFullBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtFullBath'].value_counts().idxmax()
-				elif i.at[k, 'TotalBsmtSF'] == 0 and h == 'BsmtFullBath':
+				elif i.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtFullBath':
 					i.at[k, 'BsmtFullBath'] = 0
-				elif i.at[k, 'TotalBsmtSF'] > 0 and h == 'BsmtHalfBath':
+				elif i.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtHalfBath':
 					i.at[k, 'BsmtHalfBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
-				elif i.at[k, 'TotalBsmtSF'] == 0 and h == 'BsmtHalfBath':
+				elif i.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtHalfBath':
 					i.at[k, 'BsmtHalfBath'] = 0
-		for h in bmst_list:
-			if i.loc[k,'Foundation'] == 'Slab' and not (h == 'BsmtUnfSF' or h == 'BsmtFinSF1'):
-				i.at[k, h] = 'Abs'
+		for col in bmst_list:
+			if i.loc[k,'Foundation'] == 'Slab' and not (col == 'BsmtUnfSF' or col == 'BsmtFinSF1'):
+				i.at[k, col] = 'Abs'
 		if i.at[k, '2ndFlrSF'] > 0:
 			i.at[k, '2ndFlr'] = 1
 		else:
@@ -209,14 +215,8 @@ for i in data:
 			if i.loc[k,'YearBuilt'] > 2000:
 				i.at[k, 'MSZoning'] = 'FV'
 		k+=1
-	for j in numeric_list:
-		i[j] = pd.to_numeric(i[j])
-	print(len(i.columns))
-	for col in quality_sum_list:
-		i = pd.concat([i,pd.get_dummies(i[col], prefix=col)],axis=1)
-		i.drop([col],axis=1, inplace=True)
-	print(len(i.columns))
-	label_encoder = preprocessing.LabelEncoder()
+	for col in numeric_list:
+		i[col] = pd.to_numeric(i[col])	
 	if check == 0:
 		mis_train = i.isnull().sum()
 		print('Columns with missing values in train after manual filling:')
@@ -225,15 +225,11 @@ for i in data:
 		mis_test = i.isnull().sum()
 		print('Columns with missing values in test after manual filling:')
 		print(mis_test[mis_test > 0])
-	for j in i.columns: ####fill missing values in left over columnt with mos frequent value
+	for col in i.columns: ####fill missing values in left over columnt with mos frequent value
 		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
-		imputer.fit(i[[j]])
-		i[[j]]= imputer.transform(i[[j]])
-		if i.dtypes[j] == 'object': #####label encode all columns with str
-			i[j]= label_encoder.fit_transform(i[j])
+		imputer.fit(i[[col]])
+		i[[col]]= imputer.transform(i[[col]])
 	check += 1
-
-print(train.info())
 
 list_empty=train.columns[train.isnull().any()].tolist()
 missing = []
@@ -262,6 +258,30 @@ sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_before.png')
 plt.close
 
+for col in hot_encode_list:
+	train = pd.concat([train,pd.get_dummies(train[col], prefix=col)],axis=1) #### NOT WORKING YET FIX!
+	train.drop([col],axis=1, inplace=True)
+	test = pd.concat([test,pd.get_dummies(test[col], prefix=col)],axis=1) #### NOT WORKING YET FIX!
+	test.drop([col],axis=1, inplace=True)
+
+for col in train.columns:
+	if ('_None' in col) or ('_Abs' in col):
+		train.drop([col],axis=1, inplace=True)
+		test.drop([col],axis=1, inplace=True)
+
+#####redefine data, train and test name, due to concat
+train.name = 'train'
+test.name = 'test'
+data = [train,test]
+
+label_encoder = preprocessing.LabelEncoder()
+for i in data:
+	for col in i.columns:
+		if i.dtypes[col] == 'object': #####label encode all columns with str
+			i[col]= label_encoder.fit_transform(i[col])	
+
+print(train.info())
+
 #####Histogramms numerical
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
@@ -275,7 +295,6 @@ plt.savefig('graphs/hist_num.png')
 plt.close
 
 ###transform numerical to obtain normal distribution
-#quantile = QuantileTransformer(n_quantiles=1000,output_distribution='normal')
 transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','1stFlrSF','GarageArea','PorchSF']
 for i in data:
 	for col in transform_list:
@@ -284,7 +303,6 @@ for i in data:
 		elif i.name == 'train' and col == 'SalePrice':
 			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 		else:
-			#i[col] = quantile.fit_transform(i.loc[:,col].values.reshape(-1, 1))
 			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
@@ -315,13 +333,11 @@ for i in data:
 	for col in bath_list:
 		i.drop(col, axis=1, inplace=True)
 	for col in garage_list:
-		i.drop(col, axis=1, inplace=True)
-	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
-	for col in quality_sum_list:
-		if (col == 'GarageQual' or col == 'GarageCond'):
-			pass
-		else:
+		try:
 			i.drop(col, axis=1, inplace=True)
+		except:
+			pass
+	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
 ###remove columns with low correlation to price
 
@@ -349,12 +365,12 @@ for col1 in train.columns:
 			if ((col1 in col2_list) & (col2 in col1_list)):
 				pass
 			else:
-				if np.abs(train[col1].corr(train[col2])) > 0.6:
+				if np.abs(train[col1].corr(train[col2])) > 0.7:
 					high_corr.append([col1, col2, train[col1].corr(train[col2])])
-				if np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col1])) > np.abs(train['SalePrice'].corr(train[col2])):
+				if np.abs(train[col1].corr(train[col2])) > 0.95 and np.abs(train['SalePrice'].corr(train[col1])) >= np.abs(train['SalePrice'].corr(train[col2])):
 					if col2 not in drop_corr:
 						drop_corr.append(col2)
-				elif np.abs(train[col1].corr(train[col2])) > 0.9 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
+				elif np.abs(train[col1].corr(train[col2])) > 0.95 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
 					if col1 not in drop_corr:
 						drop_corr.append(col1)
 		col2_list.append(col2)
@@ -372,40 +388,31 @@ print(*drop_corr, sep = '\n')
 
 ###check skewness of transformed features
 cont_skew = []
-for col in transform_list:
-	try:
-		cont_skew.append([col, train[col].skew()])
-	except:
-		pass
+for col in [element for element in transform_list if element in train]:
+	cont_skew.append([col, train[col].skew()])
 print('\nSkewness of continuous features:')
 print(*cont_skew, sep = '\n')
 
 ###check for outliers
 cont_outlier = []
-for col in transform_list:
-	try:
-		Q1, Q3 = np.percentile(train[col], 25), np.percentile(train[col], 75)
-		IQR = Q3 - Q1
-		cut_off = IQR * 3
-		lower = Q1 - cut_off 
-		upper = Q3 + cut_off
-		outliers = [x for x in train[col] if x < lower or x > upper]
-		cont_outlier.append([col, len(outliers)])
-	except:
-		pass
+for col in [element for element in transform_list if element in train]:
+	Q1, Q3 = np.percentile(train[col], 25), np.percentile(train[col], 75)
+	IQR = Q3 - Q1
+	cut_off = IQR * 3
+	lower = Q1 - cut_off 
+	upper = Q3 + cut_off
+	outliers = [x for x in train[col] if x < lower or x > upper]
+	cont_outlier.append([col, len(outliers)])
 print('\nOutliers in continuous features (3*IQR):')
 print(*cont_outlier, sep = '\n')
 
-f, ax = plt.subplots(4, 3, figsize=(20, 15))
+f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
-for col in continuous_list:
-	ax = plt.subplot(4,3,l)
-	try:
-		sn.scatterplot(x=col,y='SalePrice',data=train)
-		ax.set_title(col)
-		l+=1
-	except:
-		pass
+for col in [element for element in continuous_list if element in train]:
+	ax = plt.subplot(4,4,l)
+	sn.scatterplot(x=col,y='SalePrice',data=train)
+	ax.set_title(col)
+	l+=1
 f.tight_layout()
 plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
@@ -431,14 +438,13 @@ print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
 
 ###plot new distributions
-f, ax = plt.subplots(8, 9, figsize=(40, 40))
+f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
-for col in train.columns:
-	ax = plt.subplot(8,9,l)
+for col in [element for element in continuous_list if element in train]:
+	ax = plt.subplot(4,4,l)
 	sn.histplot(data=train[col],kde=True)
 	ax.set_title(col)
 	l+=1
-
 f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
@@ -475,7 +481,7 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # 	criterion='mse',
 # 	random_state=666,
 # )
-# 
+
 # search_space = {
 # 	'min_samples_split': (2, 10),
 # 	'min_samples_leaf': (2, 10),
@@ -483,9 +489,9 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # 	'max_features': ['auto', 'sqrt', 'log2', None], ##
 # 	'n_estimators': (5, 5000),
 # }
-# 
+
 # cv = KFold(n_splits=5, shuffle=True)
-# n_iterations = 100
+# n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 # 	estimator=estimator,
 # 	search_spaces=search_space,
@@ -499,10 +505,10 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 
 # rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
 # print('\nOptimized Random Forest Parameters:')
-# print(.best_params_)
+# print(rf_reg_opt.best_params_)
 # Y_pred = rf_reg_opt.predict(x_test)
 # print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-# Optimized Random Forest Classifier: Optimized Random Forest Parameters: OrderedDict([('max_depth', 10), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 4), ('n_estimators', 4926)])
+# Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 15), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 5000)
 
 ####XGBoost
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
@@ -522,7 +528,7 @@ plt.close
 #     verbosity=0,
 #     booster='gbtree',
 # )
-# 
+
 # search_space = {
 #     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
 #     'min_child_weight': (0, 10),
@@ -531,9 +537,9 @@ plt.close
 #     'min_child_weight': (0, 5),
 #     'n_estimators': (5, 5000),
 # }
-# 
+
 # cv = KFold(n_splits=5, shuffle=True)
-# n_iterations = 100
+# n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
@@ -584,19 +590,6 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 #     verbose=0,
 #     refit=True,
 # )
-
-# def print_status(optimal_result):
-# 	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
-# 	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
-# 	print(
-# 		'Model #{}\nBest so far: {}\nBest parameters so far: {}\n'.format(
-# 			len(models_tested),
-# 			np.round(bayes_cv_tuner.best_score_, 5),
-# 			bayes_cv_tuner.best_params_,
-# 		)
-# 	)
-# 	clf_type = bayes_cv_tuner.estimator.__class__.__name__
-# 	models_tested.to_csv(clf_type + '_cv_results_summary.csv')
 
 # cb_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
 # print('\nOptimized CatBoost Parameters:')
