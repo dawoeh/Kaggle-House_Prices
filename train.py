@@ -19,6 +19,32 @@ from skopt.space import Real
 import xgboost as xgb
 import catboost as cbr
 
+#####FUNCTIONS
+def correlation_columns(df, target_feature, cor_limit, drop_limit):
+	high_corr = []
+	drop_corr = []
+	col1_list = []
+	col2_list = []
+	for col1 in df.columns:
+		for col2 in df.columns:
+			col2_list.append(col2)
+			if col1 == col2 or col1 == target_feature or col2 == target_feature:
+				pass
+			else:
+				if ((col1 in col2_list) and (col2 in col1_list)):
+					pass
+				else:
+					if np.abs(df[col1].corr(df[col2])) > cor_limit:
+						high_corr.append([col1, col2, df[col1].corr(df[col2])])
+					if np.abs(df[col1].corr(df[col2])) > drop_limit and np.abs(df[target_feature].corr(df[col1])) >= np.abs(df[target_feature].corr(df[col2])):
+						if col2 not in drop_corr:
+							drop_corr.append(col2)
+					elif np.abs(df[col1].corr(df[col2])) > drop_limit and np.abs(df[target_feature].corr(df[col2])) > np.abs(df[target_feature].corr(df[col1])):
+						if col1 not in drop_corr:
+							drop_corr.append(col1)
+		col1_list.append(col1)
+	return (high_corr, drop_corr)
+
 def print_status(optimal_result):
 	models_tested = pd.DataFrame(bayes_cv_tuner.cv_results_)
 	best_parameters_so_far = pd.Series(bayes_cv_tuner.best_params_)
@@ -32,17 +58,30 @@ def print_status(optimal_result):
 	clf_type = bayes_cv_tuner.estimator.__class__.__name__
 	models_tested.to_csv(clf_type + '_cv_results_summary.csv')
 
-#####import data
+def drop_binary(df):
+	binary_list = df.columns[df.isin([0,1]).all()]
+	df.drop(binary_list, axis=1, inplace=True)
+	return df
+
+def low_corr_target(df, target_feature, cut_off):
+	drop_cutoff = {}
+	for col in df.columns:
+		if np.abs(df[target_feature].corr(df[col])) < cut_off:
+			drop_cutoff[col] = df[target_feature].corr(df[col])
+	return drop_cutoff
+
+#####DATA IMPORT
 train = pd.read_csv('train.csv')
 train.name = 'train'
 test = pd.read_csv('test.csv')
 test.name = 'test'
 
-#####Show data statistics
+#####DATA STATISTICS
 print('***Initial Analysis***')
 print(train.describe())
 print(train.info())
 
+#####SCATTER PLOT OF ALL FEATURES
 f, ax = plt.subplots(9, 9, figsize=(50, 50))
 l=1
 for col in train.columns:
@@ -58,7 +97,7 @@ print('Scatter plot against SalePrice for each feature in the dataset created.')
 
 data = [train,test]
 
-###Identify and count missing values
+###MISSING DATA
 for i in data:
 	if i.name == 'train':
 		mis_train = i.isnull().sum()
@@ -73,27 +112,27 @@ mis_overall = np.add(mis_train,mis_test)
 print('Columns with missing values in total:')
 print(mis_overall[mis_overall > 0])
 
-####combine test and train data for analysis
+####COMBINE TEST AND TRAIN FOR ANALYSIS
 combine_data = pd.concat([train, test], axis=0) 
 
-####analyse correlations for features with missing values
+####CORRELATIONS FOR MISSING DATA
 print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
 
 numeric_list = ['MiscFeature','Pool','2ndFlr']
-drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2','Id']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold+Utilities+Id no correlation, BsmtFin engineered
+drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold no correlation, BsmtFin engineered
 continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
-hot_encode_list = ['MSZoning','Alley', 'Street', 'LotShape', 'Utilities', 'LotConfig', 'LandSlope', 'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating', 'Electrical', 'GarageType', 'GarageFinish', 'SaleCondition', 'Fence']
+hot_encode_list = ['MSZoning','Alley', 'Street', 'LotShape', 'Utilities', 'LotConfig', 'LandSlope', 'LandContour',  'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating', 'Electrical', 'GarageType', 'GarageFinish', 'SaleCondition', 'Fence', 'CentralAir', 'SaleType', 'PavedDrive', 'Functional', 'BsmtExposure']
 hot_encode_list.extend(quality_sum_list)
 
-####feature engineering; fill missing values
+####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
 check = 0
 for i in data:
 	k = 0
@@ -121,12 +160,12 @@ for i in data:
 				i.at[k, 'MasVnrType'] = 'Stone'
 			else:
 				i.at[k, 'MasVnrType'] = 'None'
-		if pd.isna(i.at[k, 'MasVnrArea']): ######no strong correlation with any other feature, fill with data mean
+		if pd.isna(i.at[k, 'MasVnrArea']): ######No strong correlation with any other feature, fill with data mean
 			if i.at[k, 'MasVnrType'] != 'None':
 				i.at[k, 'MasVnrArea'] = combine_data.loc[combine_data['MasVnrArea'] > 0, 'MasVnrArea'].mean()
 			else:
 				i.at[k, 'MasVnrArea'] = 0
-		if pd.isna(i.at[k, 'LotFrontage']): ######no strong correlation with any other feature, fill with data mean
+		if pd.isna(i.at[k, 'LotFrontage']): ######No strong correlation with any other feature, fill with data mean
 			i.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
 		for col in garage_list:
 			if col == 'GarageYrBlt':
@@ -140,7 +179,7 @@ for i in data:
 		if pd.isna(i.at[k, 'GarageCars']):
 			i.at[k, 'GarageCars'] = i.loc[i['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
 		if pd.isna(i.at[k, 'TotalBsmtSF']):
-			i.at[k, 'TotalBsmtSF'] = i.at[k, '1stFlrSF']
+			i.at[k, 'TotalBsmtSF'] = 0  ### One entry in test; either 0 or i.at[k, '1stFlrSF']
 		if pd.isna(i.at[k, 'LotFrontage']):  
 			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
 		for col in bath_list:
@@ -225,7 +264,7 @@ for i in data:
 		mis_test = i.isnull().sum()
 		print('Columns with missing values in test after manual filling:')
 		print(mis_test[mis_test > 0])
-	for col in i.columns: ####fill missing values in left over columnt with mos frequent value
+	for col in i.columns: ####Fill missing values in left over columnt with most frequent value
 		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
 		imputer.fit(i[[col]])
 		i[[col]]= imputer.transform(i[[col]])
@@ -251,7 +290,7 @@ if missing:
 else:
 	print('No missing values in the test set left!')
 
-####Correlation Matrix
+###CORRELATION MATRIX
 trainMatrix = train.corr()
 f, ax = plt.subplots(figsize=(57, 55))
 sn.heatmap(trainMatrix, annot=True)
@@ -259,17 +298,19 @@ plt.savefig('graphs/heatmap_before.png')
 plt.close
 
 for col in hot_encode_list:
-	train = pd.concat([train,pd.get_dummies(train[col], prefix=col)],axis=1) #### NOT WORKING YET FIX!
+	train = pd.concat([train,pd.get_dummies(train[col], prefix=col)],axis=1)
 	train.drop([col],axis=1, inplace=True)
-	test = pd.concat([test,pd.get_dummies(test[col], prefix=col)],axis=1) #### NOT WORKING YET FIX!
+	test = pd.concat([test,pd.get_dummies(test[col], prefix=col)],axis=1)
 	test.drop([col],axis=1, inplace=True)
 
+
+drop_list_columns.extend(['SaleType_WD', 'SaleCondition_Normal', 'Functional_Typ', 'CentralAir_N', 'Street_Pave', 'PavedDrive_Y', 'Utilities_AllPub'])
 for col in train.columns:
-	if ('_None' in col) or ('_Abs' in col):
+	if ('_None' in col) or ('_Abs' in col) or (col in drop_list_columns):
 		train.drop([col],axis=1, inplace=True)
 		test.drop([col],axis=1, inplace=True)
 
-#####redefine data, train and test name, due to concat
+###REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
 train.name = 'train'
 test.name = 'test'
 data = [train,test]
@@ -282,10 +323,10 @@ for i in data:
 
 print(train.info())
 
-#####Histogramms numerical
+#####HISTOGRAMS CONTINUOUS DATA
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
-for i in continuous_list:
+for i in [element for element in continuous_list if element in train]:
 	ax = plt.subplot(4,5,l)
 	sn.histplot(data=train[i])
 	ax.set_title(i)
@@ -294,10 +335,10 @@ f.tight_layout()
 plt.savefig('graphs/hist_num.png')
 plt.close
 
-###transform numerical to obtain normal distribution
+###TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
 transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','1stFlrSF','GarageArea','PorchSF']
 for i in data:
-	for col in transform_list:
+	for col in [element for element in transform_list if element in train]:
 		if i.name == 'test' and col == 'SalePrice':
 			pass
 		elif i.name == 'train' and col == 'SalePrice':
@@ -307,7 +348,7 @@ for i in data:
 
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
-for i in continuous_list:
+for i in [element for element in continuous_list if element in train]:
 	ax = plt.subplot(4,5,l)
 	sn.histplot(data=train[i])
 	ax.set_title(i)
@@ -318,7 +359,7 @@ plt.close
 
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
 l=1
-for i in continuous_list:
+for i in [element for element in continuous_list if element in train]:
 	ax = plt.subplot(4,5,l)
 	sn.boxplot(data=train[i])
 	ax.set_title(i)
@@ -326,10 +367,8 @@ for i in continuous_list:
 plt.savefig('graphs/box_num_quantile.png')
 plt.close
 
-####delete defined columns
+####DELETE DEFINE COLUMNS
 for i in data:
-	for col in drop_list_columns:
-		i.drop(col, axis=1, inplace=True)
 	for col in bath_list:
 		i.drop(col, axis=1, inplace=True)
 	for col in garage_list:
@@ -339,42 +378,8 @@ for i in data:
 			pass
 	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
-###remove columns with low correlation to price
-
-# print('\n***Remove features with low correlation to SalePrice and analyse correlations between remaining features***')
-# drop_cutoff = []
-# for col in train.columns:
-# 	if np.abs(train['SalePrice'].corr(train[col])) < 0.1:
-# 		drop_cutoff.append([col, train['SalePrice'].corr(train[col])])
-# 		train.drop(col, axis=1, inplace=True)
-# 		test.drop(col, axis=1, inplace=True)
-# print('The following features were dropped due to low correlation:')
-# print(*drop_cutoff, sep = '\n')
-
-###check for high correlation between features, remove worse feature when correlation higher than 0.8
-high_corr = []
-drop_corr = []
-col1_list = []
-col2_list = []
-for col1 in train.columns:
-	for col2 in train.columns:
-		col2_list.append(col2)
-		if col1 == col2 or col1 == 'SalePrice' or col2 == 'SalePrice':
-			pass
-		else:
-			if ((col1 in col2_list) & (col2 in col1_list)):
-				pass
-			else:
-				if np.abs(train[col1].corr(train[col2])) > 0.7:
-					high_corr.append([col1, col2, train[col1].corr(train[col2])])
-				if np.abs(train[col1].corr(train[col2])) > 0.95 and np.abs(train['SalePrice'].corr(train[col1])) >= np.abs(train['SalePrice'].corr(train[col2])):
-					if col2 not in drop_corr:
-						drop_corr.append(col2)
-				elif np.abs(train[col1].corr(train[col2])) > 0.95 and np.abs(train['SalePrice'].corr(train[col2])) > np.abs(train['SalePrice'].corr(train[col1])):
-					if col1 not in drop_corr:
-						drop_corr.append(col1)
-		col2_list.append(col2)
-	col1_list.append(col1)
+###ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES AUTOMATICALLY
+high_corr, drop_corr = correlation_columns(train, 'SalePrice', 0.7, 0.95)
 
 for col in drop_corr:
 	train.drop(col, axis=1, inplace=True)
@@ -386,14 +391,14 @@ print(*high_corr, sep = '\n')
 print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
 
-###check skewness of transformed features
+###SKEWNESS OF TRANSFORMED FEATURES
 cont_skew = []
 for col in [element for element in transform_list if element in train]:
 	cont_skew.append([col, train[col].skew()])
 print('\nSkewness of continuous features:')
 print(*cont_skew, sep = '\n')
 
-###check for outliers
+###CHECK FOR OUTLIERS
 cont_outlier = []
 for col in [element for element in transform_list if element in train]:
 	Q1, Q3 = np.percentile(train[col], 25), np.percentile(train[col], 75)
@@ -406,6 +411,7 @@ for col in [element for element in transform_list if element in train]:
 print('\nOutliers in continuous features (3*IQR):')
 print(*cont_outlier, sep = '\n')
 
+###SCATTER PLOT CONTINUOUS FEATURES
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
 for col in [element for element in continuous_list if element in train]:
@@ -417,7 +423,7 @@ f.tight_layout()
 plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
 
-#####Remove max-outliers in continuous features
+###REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
 outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
 outlier_row = []
 for col in outlier_col:
@@ -437,7 +443,7 @@ print('\nRows with max value outliers:')
 print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
 
-###plot new distributions
+###FINAL HISTOGRAMS SHWOING DISTRIBUTION OF CONTINUOUS FEATURES
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
 for col in [element for element in continuous_list if element in train]:
@@ -449,33 +455,45 @@ f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
 
-###final correlation matrix
+###FINAL CORRELATION MATRIC
 trainMatrix = train.corr()
 f, ax = plt.subplots(figsize=(32, 30))
 sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_cutoff.png')
 plt.close
 
-##print(train.corr()['SalePrice'].sort_values())
+print('\n***Remove features with low correlation to SalePrice for linear regression***')
+low_corr_dict = low_corr_target(train, 'SalePrice', 0.05)
+print(low_corr_dict)
+low_corr = list(low_corr_dict.keys())
+if 'Id' in low_corr:
+	low_corr.remove('Id')
+train_linreg = train.drop(low_corr, axis=1)
+test_linreg = test.drop(low_corr, axis=1)
 
-#####define training and test sets
-X_train = train.drop('SalePrice', axis=1)
+
+###TRAIN AND TEST DATA, SPLIT
+X_train = train.drop(['SalePrice', 'Id'], axis=1)
 Y_train = train['SalePrice']
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
+X_train_lin = train_linreg.drop(['SalePrice', 'Id'], axis=1)
+Y_train_lin = train_linreg['SalePrice']
+x_train_lin, x_test_lin, y_train_lin, y_test_lin = train_test_split(X_train_lin, Y_train_lin, test_size=0.3, random_state=666)
+
 print('\n***Performance of various models***')
-######LinReg
+###LINEAR REGRESSION
 linreg = LinearRegression()
-linreg.fit(x_train, y_train)
-Y_pred = linreg.predict(x_test)
-print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-#####Random Forest
-rf_reg=RandomForestRegressor(n_estimators= 500, random_state=666)
+linreg.fit(x_train_lin, y_train_lin)
+Y_pred = linreg.predict(x_test_lin)
+print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test_lin), np.expm1(Y_pred))))
+###RANDOM FOREST REGRESSOR
+rf_reg=RandomForestRegressor(n_estimators= 1000, random_state=666)
 rf_reg.fit(x_train,y_train)
 Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-#####Optimized Random Forest
+###OPTIMIZED RANDOM FOREST REGRESSOR
 # estimator = RandomForestRegressor(
 # 	n_jobs=-1,
 # 	criterion='mse',
@@ -508,9 +526,9 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # print(rf_reg_opt.best_params_)
 # Y_pred = rf_reg_opt.predict(x_test)
 # print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-# Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 15), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 5000)
+## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 15), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 5000)
 
-####XGBoost
+###XGBoost REGRESSOR
 xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
@@ -520,7 +538,7 @@ xgb.plot_importance(xg_reg,ax=ax,color='red')
 plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
 
-####Optimized XGBoost
+###OPTIMIZED XGBoost REGRESSOR
 # estimator = xgb.XGBRegressor(
 #     n_jobs=-1,
 #     objective='reg:squarederror',
@@ -538,8 +556,8 @@ plt.close
 #     'n_estimators': (5, 5000),
 # }
 
-# cv = KFold(n_splits=5, shuffle=True)
-# n_iterations = 50
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
@@ -558,13 +576,13 @@ plt.close
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters XGBoost: ('colsample_bytree', 0.18258981575390182), ('learning_rate', 0.017637427180919204), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 2928)
 
-####CatBoost
+###CatBoost REGRESSOR
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
 cb_reg.fit(x_train,y_train,silent=True)
 Y_pred = cb_reg.predict(x_test)
 print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-####Optimized CatBoost
+####OPTIMIZED CatBoost REGRESSOR
 # estimator = cbr.CatBoostRegressor(
 #     loss_function = 'MAE',
 #     eval_metric = 'MSLE',
@@ -596,4 +614,4 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print(cb_reg_opt.best_params_)
 # Y_pred = cb_reg_opt.predict(x_test)
 # print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-###Best parameters: ('iterations', 1875), ('l2_leaf_reg', 30), ('learning_rate', 0.022068113971935165), ('max_depth', 3)
+## Best parameters: ('iterations', 1875), ('l2_leaf_reg', 30), ('learning_rate', 0.022068113971935165), ('max_depth', 3)
