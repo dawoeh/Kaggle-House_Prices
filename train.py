@@ -70,6 +70,18 @@ def low_corr_target(df, target_feature, cut_off):
 			drop_cutoff[col] = df[target_feature].corr(df[col])
 	return drop_cutoff
 
+def count_outliers(df, columns, IQR_range):
+	dict_outlier = {}
+	for col in [element for element in columns if element in df]:
+		Q1, Q3 = np.percentile(df[col], 25), np.percentile(df[col], 75)
+		IQR = Q3 - Q1
+		cut_off = IQR * IQR_range
+		lower = Q1 - cut_off 
+		upper = Q3 + cut_off
+		outliers = [x for x in df[col] if x < lower or x > upper]
+		dict_outlier[col] = len(outliers)
+	return dict_outlier
+
 #####DATA IMPORT
 train = pd.read_csv('train.csv')
 train.name = 'train'
@@ -119,7 +131,6 @@ combine_data = pd.concat([train, test], axis=0)
 print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
-
 
 numeric_list = ['MiscFeature','Pool','2ndFlr']
 drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold no correlation, BsmtFin engineered
@@ -299,10 +310,15 @@ plt.close
 
 for col in hot_encode_list:
 	train = pd.concat([train,pd.get_dummies(train[col], prefix=col)],axis=1)
-	train.drop([col],axis=1, inplace=True)
+	train.drop(col,axis=1, inplace=True)
 	test = pd.concat([test,pd.get_dummies(test[col], prefix=col)],axis=1)
-	test.drop([col],axis=1, inplace=True)
+	test.drop(col,axis=1, inplace=True)
 
+print('\nThe following columns are only present in the train set after hot encoding. Removing:')
+unique_train = list(set(list(train.columns))- set(list(test.columns)))
+unique_train.remove('SalePrice')
+print(unique_train)
+train.drop(unique_train,axis=1, inplace=True)
 
 drop_list_columns.extend(['SaleType_WD', 'SaleCondition_Normal', 'Functional_Typ', 'CentralAir_N', 'Street_Pave', 'PavedDrive_Y', 'Utilities_AllPub'])
 for col in train.columns:
@@ -319,9 +335,7 @@ label_encoder = preprocessing.LabelEncoder()
 for i in data:
 	for col in i.columns:
 		if i.dtypes[col] == 'object': #####label encode all columns with str
-			i[col]= label_encoder.fit_transform(i[col])	
-
-print(train.info())
+			i[col]= label_encoder.fit_transform(i[col])
 
 #####HISTOGRAMS CONTINUOUS DATA
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
@@ -378,7 +392,7 @@ for i in data:
 			pass
 	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
-###ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES AUTOMATICALLY
+###ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES
 high_corr, drop_corr = correlation_columns(train, 'SalePrice', 0.7, 0.95)
 
 for col in drop_corr:
@@ -392,24 +406,17 @@ print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
 
 ###SKEWNESS OF TRANSFORMED FEATURES
-cont_skew = []
+cont_skew = {}
 for col in [element for element in transform_list if element in train]:
-	cont_skew.append([col, train[col].skew()])
+	cont_skew[col] = train[col].skew()
 print('\nSkewness of continuous features:')
-print(*cont_skew, sep = '\n')
+[print(key,':',value) for key, value in cont_skew.items()]
 
 ###CHECK FOR OUTLIERS
-cont_outlier = []
-for col in [element for element in transform_list if element in train]:
-	Q1, Q3 = np.percentile(train[col], 25), np.percentile(train[col], 75)
-	IQR = Q3 - Q1
-	cut_off = IQR * 3
-	lower = Q1 - cut_off 
-	upper = Q3 + cut_off
-	outliers = [x for x in train[col] if x < lower or x > upper]
-	cont_outlier.append([col, len(outliers)])
+cont_outlier = count_outliers(train, transform_list, 3)
 print('\nOutliers in continuous features (3*IQR):')
-print(*cont_outlier, sep = '\n')
+[print(key,':',value) for key, value in cont_outlier.items()]
+##print(*cont_outlier, sep = '\n')
 
 ###SCATTER PLOT CONTINUOUS FEATURES
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
@@ -455,38 +462,34 @@ f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
 
-###FINAL CORRELATION MATRIC
+###FINAL CORRELATION MATRIX
 trainMatrix = train.corr()
 f, ax = plt.subplots(figsize=(32, 30))
 sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_cutoff.png')
 plt.close
 
+###IDENTIFY FEATURES WITH LOW CORRELATION TO PRICE FOR REMOVAL BEFORE LINEAR REGRESSION
 print('\n***Remove features with low correlation to SalePrice for linear regression***')
-low_corr_dict = low_corr_target(train, 'SalePrice', 0.05)
-print(low_corr_dict)
+low_corr_dict = low_corr_target(train, 'SalePrice', 0.1)
 low_corr = list(low_corr_dict.keys())
 if 'Id' in low_corr:
 	low_corr.remove('Id')
-train_linreg = train.drop(low_corr, axis=1)
-test_linreg = test.drop(low_corr, axis=1)
-
+print(low_corr)
 
 ###TRAIN AND TEST DATA, SPLIT
 X_train = train.drop(['SalePrice', 'Id'], axis=1)
 Y_train = train['SalePrice']
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
-X_train_lin = train_linreg.drop(['SalePrice', 'Id'], axis=1)
-Y_train_lin = train_linreg['SalePrice']
-x_train_lin, x_test_lin, y_train_lin, y_test_lin = train_test_split(X_train_lin, Y_train_lin, test_size=0.3, random_state=666)
-
 print('\n***Performance of various models***')
 ###LINEAR REGRESSION
+x_train_lin = x_train.drop(low_corr, axis=1)
+x_test_lin = x_test.drop(low_corr, axis=1)
 linreg = LinearRegression()
-linreg.fit(x_train_lin, y_train_lin)
+linreg.fit(x_train_lin, y_train)
 Y_pred = linreg.predict(x_test_lin)
-print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test_lin), np.expm1(Y_pred))))
+print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ###RANDOM FOREST REGRESSOR
 rf_reg=RandomForestRegressor(n_estimators= 1000, random_state=666)
 rf_reg.fit(x_train,y_train)
