@@ -4,13 +4,12 @@ import matplotlib.pyplot as plt
 plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
 
-from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import KFold
 
 from skopt import BayesSearchCV
@@ -58,10 +57,9 @@ def print_status(optimal_result):
 	clf_type = bayes_cv_tuner.estimator.__class__.__name__
 	models_tested.to_csv(clf_type + '_cv_results_summary.csv')
 
-def drop_binary(df):
+def return_binary_col(df):
 	binary_list = df.columns[df.isin([0,1]).all()]
-	df.drop(binary_list, axis=1, inplace=True)
-	return df
+	return binary_list
 
 def low_corr_target(df, target_feature, cut_off):
 	drop_cutoff = {}
@@ -109,7 +107,7 @@ print('Scatter plot against SalePrice for each feature in the dataset created.')
 
 data = [train,test]
 
-###MISSING DATA
+#####MISSING DATA
 for i in data:
 	if i.name == 'train':
 		mis_train = i.isnull().sum()
@@ -124,10 +122,10 @@ mis_overall = np.add(mis_train,mis_test)
 print('Columns with missing values in total:')
 print(mis_overall[mis_overall > 0])
 
-####COMBINE TEST AND TRAIN FOR ANALYSIS
+#####COMBINE TEST AND TRAIN FOR ANALYSIS
 combine_data = pd.concat([train, test], axis=0) 
 
-####CORRELATIONS FOR MISSING DATA
+#####CORRELATIONS FOR MISSING DATA
 print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
@@ -143,7 +141,7 @@ porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckS
 hot_encode_list = ['MSZoning','Alley', 'Street', 'LotShape', 'Utilities', 'LotConfig', 'LandSlope', 'LandContour',  'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating', 'Electrical', 'GarageType', 'GarageFinish', 'SaleCondition', 'Fence', 'CentralAir', 'SaleType', 'PavedDrive', 'Functional', 'BsmtExposure']
 hot_encode_list.extend(quality_sum_list)
 
-####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
+#####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
 check = 0
 for i in data:
 	k = 0
@@ -254,7 +252,7 @@ for i in data:
 				i.at[k, h] = 0
 		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
 		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,'LotArea'])
-		if pd.isna(i.at[k, 'MSZoning']): #####fill missing values based on 
+		if pd.isna(i.at[k, 'MSZoning']): #####Fill missing values based on 
 			i.at[k, 'MSZoning'] = 'C (all)'
 			if i.loc[k,'YearBuilt'] > 1938:
 				i.at[k, 'MSZoning'] = 'RM'
@@ -301,7 +299,7 @@ if missing:
 else:
 	print('No missing values in the test set left!')
 
-###CORRELATION MATRIX
+#####CORRELATION MATRIX
 trainMatrix = train.corr()
 f, ax = plt.subplots(figsize=(57, 55))
 sn.heatmap(trainMatrix, annot=True)
@@ -326,7 +324,7 @@ for col in train.columns:
 		train.drop([col],axis=1, inplace=True)
 		test.drop([col],axis=1, inplace=True)
 
-###REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
+#####REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
 train.name = 'train'
 test.name = 'test'
 data = [train,test]
@@ -349,7 +347,7 @@ f.tight_layout()
 plt.savefig('graphs/hist_num.png')
 plt.close
 
-###TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
+#####TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
 transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','1stFlrSF','GarageArea','PorchSF']
 for i in data:
 	for col in [element for element in transform_list if element in train]:
@@ -381,7 +379,7 @@ for i in [element for element in continuous_list if element in train]:
 plt.savefig('graphs/box_num_quantile.png')
 plt.close
 
-####DELETE DEFINE COLUMNS
+#####DELETE DEFINE COLUMNS
 for i in data:
 	for col in bath_list:
 		i.drop(col, axis=1, inplace=True)
@@ -392,7 +390,7 @@ for i in data:
 			pass
 	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
-###ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES
+#####ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES
 high_corr, drop_corr = correlation_columns(train, 'SalePrice', 0.7, 0.95)
 
 for col in drop_corr:
@@ -405,20 +403,19 @@ print(*high_corr, sep = '\n')
 print('\nAutomatically removed:')
 print(*drop_corr, sep = '\n')
 
-###SKEWNESS OF TRANSFORMED FEATURES
+#####SKEWNESS OF TRANSFORMED FEATURES
 cont_skew = {}
 for col in [element for element in transform_list if element in train]:
 	cont_skew[col] = train[col].skew()
 print('\nSkewness of continuous features:')
 [print(key,':',value) for key, value in cont_skew.items()]
 
-###CHECK FOR OUTLIERS
+#####CHECK FOR OUTLIERS
 cont_outlier = count_outliers(train, transform_list, 3)
 print('\nOutliers in continuous features (3*IQR):')
 [print(key,':',value) for key, value in cont_outlier.items()]
-##print(*cont_outlier, sep = '\n')
 
-###SCATTER PLOT CONTINUOUS FEATURES
+#####SCATTER PLOT CONTINUOUS FEATURES
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
 for col in [element for element in continuous_list if element in train]:
@@ -430,7 +427,7 @@ f.tight_layout()
 plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
 
-###REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
+#####REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
 outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
 outlier_row = []
 for col in outlier_col:
@@ -450,7 +447,7 @@ print('\nRows with max value outliers:')
 print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
 
-###FINAL HISTOGRAMS SHWOING DISTRIBUTION OF CONTINUOUS FEATURES
+#####FINAL HISTOGRAMS SHWOING DISTRIBUTION OF CONTINUOUS FEATURES
 f, ax = plt.subplots(4, 4, figsize=(20, 20))
 l=1
 for col in [element for element in continuous_list if element in train]:
@@ -462,14 +459,14 @@ f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
 
-###FINAL CORRELATION MATRIX
+#####FINAL CORRELATION MATRIX
 trainMatrix = train.corr()
 f, ax = plt.subplots(figsize=(32, 30))
 sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_cutoff.png')
 plt.close
 
-###IDENTIFY FEATURES WITH LOW CORRELATION TO PRICE FOR REMOVAL BEFORE LINEAR REGRESSION
+#####IDENTIFY FEATURES WITH LOW CORRELATION TO PRICE FOR REMOVAL BEFORE LINEAR REGRESSION
 print('\n***Remove features with low correlation to SalePrice for linear regression***')
 low_corr_dict = low_corr_target(train, 'SalePrice', 0.1)
 low_corr = list(low_corr_dict.keys())
@@ -477,62 +474,61 @@ if 'Id' in low_corr:
 	low_corr.remove('Id')
 print(low_corr)
 
-###TRAIN AND TEST DATA, SPLIT
+#####TRAIN AND TEST DATA, SPLIT
 X_train = train.drop(['SalePrice', 'Id'], axis=1)
 Y_train = train['SalePrice']
 x_train, x_test, y_train, y_test = train_test_split(X_train, Y_train, test_size=0.3, random_state=666)
 
 print('\n***Performance of various models***')
-###LINEAR REGRESSION
+#####LINEAR REGRESSION
 x_train_lin = x_train.drop(low_corr, axis=1)
 x_test_lin = x_test.drop(low_corr, axis=1)
 linreg = LinearRegression()
 linreg.fit(x_train_lin, y_train)
 Y_pred = linreg.predict(x_test_lin)
 print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-###RANDOM FOREST REGRESSOR
+#####RANDOM FOREST REGRESSOR
 rf_reg=RandomForestRegressor(n_estimators= 1000, random_state=666)
 rf_reg.fit(x_train,y_train)
 Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-###OPTIMIZED RANDOM FOREST REGRESSOR
-# estimator = RandomForestRegressor(
-# 	n_jobs=-1,
-# 	criterion='mse',
-# 	random_state=666,
-# )
+#####OPTIMIZED RANDOM FOREST REGRESSOR
+estimator = RandomForestRegressor(
+	n_jobs=-1,
+	random_state=666,
+)
 
-# search_space = {
-# 	'min_samples_split': (2, 10),
-# 	'min_samples_leaf': (2, 10),
-# 	'max_depth': (3, 15),
-# 	'max_features': ['auto', 'sqrt', 'log2', None], ##
-# 	'n_estimators': (5, 5000),
-# }
+search_space = {
+	'min_samples_split': (2, 10),
+	'min_samples_leaf': (2, 10),
+	'max_depth': (3, 10),
+	'max_features': ['auto', 'sqrt', 'log2', None], ##
+	'n_estimators': (5, 5000),
+}
 
-# cv = KFold(n_splits=5, shuffle=True)
-# n_iterations = 50
-# bayes_cv_tuner = BayesSearchCV(
-# 	estimator=estimator,
-# 	search_spaces=search_space,
-# 	scoring='neg_mean_squared_error',
-# 	cv=cv,
-# 	n_jobs=-1,
-# 	n_iter=n_iterations,
-# 	verbose=0,
-# 	refit=True,
-# )
+cv = KFold(n_splits=5, shuffle=True)
+n_iterations = 50
+bayes_cv_tuner = BayesSearchCV(
+	estimator=estimator,
+	search_spaces=search_space,
+	scoring='neg_mean_absolute_error',
+	cv=cv,
+	n_jobs=-1,
+	n_iter=n_iterations,
+	verbose=0,
+	refit=True,
+)
 
-# rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-# print('\nOptimized Random Forest Parameters:')
-# print(rf_reg_opt.best_params_)
-# Y_pred = rf_reg_opt.predict(x_test)
-# print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+print('\nOptimized Random Forest Parameters:')
+print(rf_reg_opt.best_params_)
+Y_pred = rf_reg_opt.predict(x_test)
+print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 15), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 5000)
 
-###XGBoost REGRESSOR
-xg_reg = xgb.XGBRegressor(objective = 'reg:squarederror', eval_metric='rmse', colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000, booster = 'gbtree')
+#####XGBoost REGRESSOR
+xg_reg = xgb.XGBRegressor(colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000)
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
 print('Accuracy XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -541,13 +537,10 @@ xgb.plot_importance(xg_reg,ax=ax,color='red')
 plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
 
-###OPTIMIZED XGBoost REGRESSOR
+#####OPTIMIZED XGBoost REGRESSOR
 # estimator = xgb.XGBRegressor(
 #     n_jobs=-1,
-#     objective='reg:squarederror',
-#     eval_metric='rmse',
 #     verbosity=0,
-#     booster='gbtree',
 # )
 
 # search_space = {
@@ -564,7 +557,7 @@ plt.close
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
-#     scoring='neg_mean_squared_error',
+#     scoring='neg_mean_absolute_error',
 #     cv=cv,
 #     n_jobs=-1,
 #     n_iter=n_iterations,
@@ -579,16 +572,14 @@ plt.close
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters XGBoost: ('colsample_bytree', 0.18258981575390182), ('learning_rate', 0.017637427180919204), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 2928)
 
-###CatBoost REGRESSOR
-cb_reg = cbr.CatBoostRegressor(n_estimators = 1000, loss_function = 'MAE', eval_metric = 'MSLE')
+#####CatBoost REGRESSOR
+cb_reg = cbr.CatBoostRegressor(n_estimators = 1000)
 cb_reg.fit(x_train,y_train,silent=True)
 Y_pred = cb_reg.predict(x_test)
 print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 ####OPTIMIZED CatBoost REGRESSOR
 # estimator = cbr.CatBoostRegressor(
-#     loss_function = 'MAE',
-#     eval_metric = 'MSLE',
 #     silent=True,
 # )
 
@@ -604,7 +595,7 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
-#     scoring='neg_mean_squared_error',
+#     scoring='neg_mean_absolute_error',
 #     cv=cv,
 #     n_jobs=-1,
 #     n_iter=n_iterations,
@@ -618,3 +609,12 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # Y_pred = cb_reg_opt.predict(x_test)
 # print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ## Best parameters: ('iterations', 1875), ('l2_leaf_reg', 30), ('learning_rate', 0.022068113971935165), ('max_depth', 3)
+
+#####PREDICT TEST DATA AND EXPORT FOR UPLOAD
+predict_export = pd.DataFrame()
+predict_export['Id'] = test['Id']
+
+prediction_catboost = cb_reg.predict(test.drop('Id', axis=1))
+prediction_catboost = np.expm1(prediction_catboost)
+predict_export['SalePrice'] = prediction_catboost
+predict_export.to_csv('submission.csv',index=False)
