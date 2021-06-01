@@ -123,181 +123,160 @@ print('Columns with missing values in total:')
 print(mis_overall[mis_overall > 0])
 
 #####COMBINE TEST AND TRAIN FOR ANALYSIS
-combine_data = pd.concat([train, test], axis=0) 
+train['Test'] = 0
+test['Test'] = 1
+combine_data = pd.concat([train, test], axis=0, ignore_index=True)
+print(combine_data.describe())
 
 #####CORRELATIONS FOR MISSING DATA
 print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
-numeric_list = ['MiscFeature','Pool','2ndFlr']
-drop_list_columns = ['YearBuilt','YearRemodAdd','1stFlrSF','2ndFlrSF','YrSold','MoSold','BsmtFinSF1','BsmtFinSF2']  ###Year columns engineered, FlrSF combined and discrete variable for 2nd floor, Time sold no correlation, BsmtFin engineered
 continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
-garage_list = ['GarageType','GarageYrBlt','GarageFinish','GarageQual','GarageCond','GarageArea']
+garage_list = ['GarageType','GarageFinish','GarageQual','GarageCond']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
 bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
-hot_encode_list = ['MSZoning','Alley', 'Street', 'LotShape', 'Utilities', 'LotConfig', 'LandSlope', 'LandContour',  'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating', 'Electrical', 'GarageType', 'GarageFinish', 'SaleCondition', 'Fence', 'CentralAir', 'SaleType', 'PavedDrive', 'Functional', 'BsmtExposure']
-hot_encode_list.extend(quality_sum_list)
 
 #####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
-check = 0
-for i in data:
-	k = 0
-	while k < len(i):
-		if pd.isna(i.at[k, 'Alley']):
-			i.at[k,'Alley'] = 'None'
-		if pd.isna(i.at[k, 'PoolQC']):
-			i.at[k,'PoolQC'] = 'Abs'
-		if i.loc[k,'PoolArea'] > 0:
-			i.at[k,'Pool'] = 1
+
+combine_data.loc[combine_data['Alley'].isna(), 'Alley'] = 'Abs'
+combine_data.loc[combine_data['PoolQC'].isna(), 'PoolQC'] = 'Abs'
+combine_data.loc[combine_data['Fence'].isna(), 'Fence'] = 'Abs'
+combine_data.loc[combine_data['FireplaceQu'].isna(), 'FireplaceQu'] = 'Abs'
+combine_data.loc[combine_data['MasVnrType'].isna(), 'MasVnrType'] = 'Abs'
+combine_data.loc[combine_data['MiscFeature'].isna(), 'MiscFeature'] = 'Abs'
+for col in garage_list:
+	combine_data.loc[combine_data[col].isna(), col] = 'Abs'
+
+combine_data.loc[combine_data['TotalBsmtSF'].isna(), 'TotalBsmtSF'] = 0
+combine_data.loc[combine_data['LotFrontage'].isna(), 'LotFrontage'] = 0
+combine_data.loc[combine_data['GarageYrBlt'].isna(), 'GarageYrBlt'] = 0
+combine_data.loc[combine_data['GarageArea'].isna(), 'GarageArea'] = 0
+combine_data.loc[combine_data['GarageCars'].isna(), 'GarageCars'] = 0
+
+k = 0
+while k < len(combine_data):
+	if combine_data.at[k,'PoolArea'] > 0:
+		combine_data.at[k,'Pool'] = 1
+	else:
+		combine_data.at[k,'Pool'] = 0
+	# if pd.isna(combine_data.at[k, 'MiscFeature']):
+	# 	combine_data.at[k, 'MiscFeature'] = 0
+	# else:
+	# 	combine_data.at[k, 'MiscFeature'] = 1
+	# if pd.isna(combine_data.at[k, 'MasVnrType']): ######Feature depends on OverallQual; use it as criterion to fill missing values
+	# 	if combine_data.at[k, 'OverallQual'] == 7:
+	# 		combine_data.at[k, 'MasVnrType'] = 'BrkFace'
+	# 	elif combine_data.at[k, 'OverallQual'] > 7:
+	# 		combine_data.at[k, 'MasVnrType'] = 'Stone'
+	# 	else:
+	# 		combine_data.at[k, 'MasVnrType'] = 'Abs'
+	if pd.isna(combine_data.at[k, 'MasVnrArea']): ######No strong correlation with any other feature, fill with data mean
+		if combine_data.at[k, 'MasVnrType'] != 'Abs':
+			combine_data.at[k, 'MasVnrArea'] = combine_data.loc[combine_data['MasVnrArea'] > 0, 'MasVnrArea'].mean()
 		else:
-			i.at[k,'Pool'] = 0
-		if pd.isna(i.at[k, 'MiscFeature']):
-			i.at[k, 'MiscFeature'] = 0
-		else:
-			i.at[k, 'MiscFeature'] = 1
-		if pd.isna(i.at[k, 'Fence']):
-			i.at[k, 'Fence'] = 'Abs'
-		if pd.isna(i.at[k, 'FireplaceQu']):
-			i.at[k, 'FireplaceQu'] = 'Abs'
-		if pd.isna(i.at[k, 'MasVnrType']): ######Feature depends on OverallQual; use it as criterion to fill missing values
-			if i.at[k, 'OverallQual'] == 7:
-				i.at[k, 'MasVnrType'] = 'BrkFace'
-			elif i.at[k, 'OverallQual'] > 7:
-				i.at[k, 'MasVnrType'] = 'Stone'
-			else:
-				i.at[k, 'MasVnrType'] = 'None'
-		if pd.isna(i.at[k, 'MasVnrArea']): ######No strong correlation with any other feature, fill with data mean
-			if i.at[k, 'MasVnrType'] != 'None':
-				i.at[k, 'MasVnrArea'] = combine_data.loc[combine_data['MasVnrArea'] > 0, 'MasVnrArea'].mean()
-			else:
-				i.at[k, 'MasVnrArea'] = 0
-		if pd.isna(i.at[k, 'LotFrontage']): ######No strong correlation with any other feature, fill with data mean
-			i.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
-		for col in garage_list:
-			if col == 'GarageYrBlt':
-				if pd.isna(i.at[k, 'GarageYrBlt']):
-					i.at[k, 'GarageYrBlt'] = 0
-			else:
-				if pd.isna(i.at[k, col]) and not col == 'GarageArea':
-					i.at[k, col] = 'Abs'
-		if pd.isna(i.at[k, 'GarageArea']):
-			i.at[k, 'GarageArea'] = i.loc[i['GarageArea'] > 0, 'GarageArea'].mean()
-		if pd.isna(i.at[k, 'GarageCars']):
-			i.at[k, 'GarageCars'] = i.loc[i['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
-		if pd.isna(i.at[k, 'TotalBsmtSF']):
-			i.at[k, 'TotalBsmtSF'] = 0  ### One entry in test; either 0 or i.at[k, '1stFlrSF']
-		if pd.isna(i.at[k, 'LotFrontage']):  
-			i.at[k, 'LotFrontage'] = np.sqrt(com.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
-		for col in bath_list:
-			if pd.isna(i.at[k, col]):
-				if i.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtFullBath':
-					i.at[k, 'BsmtFullBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtFullBath'].value_counts().idxmax()
-				elif i.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtFullBath':
-					i.at[k, 'BsmtFullBath'] = 0
-				elif i.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtHalfBath':
-					i.at[k, 'BsmtHalfBath'] = i.loc[i['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
-				elif i.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtHalfBath':
-					i.at[k, 'BsmtHalfBath'] = 0
-		for col in bmst_list:
-			if i.loc[k,'Foundation'] == 'Slab' and not (col == 'BsmtUnfSF' or col == 'BsmtFinSF1'):
-				i.at[k, col] = 'Abs'
-		if i.at[k, '2ndFlrSF'] > 0:
-			i.at[k, '2ndFlr'] = 1
-		else:
-			i.at[k, '2ndFlr'] = 0
-		if i.at[k, 'BsmtFinSF2'] > 0:
-			i.at[k, '2ndBsmtFlr'] = 1
-		else:
-			i.at[k, '2ndBsmtFlr'] = 0
-		i.at[k, 'QualitySum'] = 0
-		for l in quality_sum_list:
-			if i.at[k, l] == 'Ex':
-				i.at[k, 'QualitySum'] += 5
-			elif i.at[k, l] == 'Gd':
-				i.at[k, 'QualitySum'] += 4
-			elif i.at[k, l] == 'TA':
-				i.at[k, 'QualitySum'] += 3
-			elif i.at[k, l] == 'Fa':
-				i.at[k, 'QualitySum'] += 2
-			elif i.at[k, l] == 'Po':
-				i.at[k, 'QualitySum'] += 1
-		if i.at[k, 'TotalBsmtSF'] > 0:
-			i.at[k, 'BsmtUnfSF'] =  i.at[k, 'BsmtUnfSF']/i.at[k, 'TotalBsmtSF']
-		if i.at[k, 'TotalBsmtSF'] == 0:
-			i.at[k, 'BsmtFinType1'] = 'None'
-			i.at[k, 'BsmtFinType2'] = 'None'
-			i.at[k, 'BsmtExposure'] = 'None'
-			i.at[k, 'BsmtQual'] = 'None'
-			i.at[k, 'BsmtCond'] = 'None'
-		if pd.isna(i.at[k, 'TotalBsmtSF']):
-			i.at[k, 'BsmtFinType1'] = 'None'
-			i.at[k, 'BsmtFinType2'] = 'None'
-			i.at[k, 'BsmtExposure'] = 'None'
-			i.at[k, 'BsmtQual'] = 'None'
-			i.at[k, 'BsmtCond'] = 'None'
-		i.at[k, 'SinceRenov'] = i.at[k, 'YrSold'] - i.at[k, 'YearRemodAdd']
-		if i.at[k, 'SinceRenov'] < 0:
-			i.at[k, 'SinceRenov'] = 0
-		i.at[k, 'Age'] = i.at[k, 'YrSold'] - i.at[k, 'YearBuilt']
-		if i.at[k, 'Age'] < 0:
-			i.at[k, 'Age'] = 0
-		i.at[k, 'PorchSF'] = i.at[k, 'OpenPorchSF'] + i.at[k, 'EnclosedPorch'] + i.at[k, '3SsnPorch'] + i.at[k, 'ScreenPorch'] + i.at[k, 'WoodDeckSF']
-		for h in porch_list:
-			if i.at[k, h] > 0:
-				i.at[k, h] = 1
-			else:
-				i.at[k, h] = 0
-		i.at[k, 'Bath_count'] = i.at[k, 'BsmtFullBath'] + i.at[k, 'FullBath'] + 0.5*i.at[k, 'BsmtHalfBath'] + 0.5*i.at[k, 'HalfBath']
-		i.at[k, 'LotFrontage'] = i.at[k, 'LotFrontage'] / np.sqrt(i.at[k,'LotArea'])
-		if pd.isna(i.at[k, 'MSZoning']): #####Fill missing values based on 
-			i.at[k, 'MSZoning'] = 'C (all)'
-			if i.loc[k,'YearBuilt'] > 1938:
-				i.at[k, 'MSZoning'] = 'RM'
-			if i.loc[k,'YearBuilt'] > 1948:
-				i.at[k, 'MSZoning'] = 'RH'
-			if i.loc[k,'YearBuilt'] > 1970:
-				i.at[k, 'MSZoning'] = 'RL'
-			if i.loc[k,'YearBuilt'] > 2000:
-				i.at[k, 'MSZoning'] = 'FV'
-		k+=1
-	for col in numeric_list:
-		i[col] = pd.to_numeric(i[col])	
-	if check == 0:
-		mis_train = i.isnull().sum()
-		print('Columns with missing values in train after manual filling:')
-		print(mis_train[mis_train > 0])		
-	if check == 1:
-		mis_test = i.isnull().sum()
-		print('Columns with missing values in test after manual filling:')
-		print(mis_test[mis_test > 0])
-	for col in i.columns: ####Fill missing values in left over columnt with most frequent value
+			combine_data.at[k, 'MasVnrArea'] = 0
+	# if pd.isna(combine_data.at[k, 'LotFrontage']): ######No strong correlation with any other feature, fill with data mean
+	# 	combine_data.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
+	# for col in garage_list:
+	# 	if pd.isna(combine_data.at[k, col]) and not col == 'GarageArea':
+	# 		combine_data.at[k, col] = 'Abs'
+	# if pd.isna(combine_data.at[k, 'GarageArea']):
+	# 	combine_data.at[k, 'GarageArea'] = combine_data.loc[combine_data['GarageArea'] > 0, 'GarageArea'].mean()
+	# if pd.isna(combine_data.at[k, 'GarageCars']):
+	# 	combine_data.at[k, 'GarageCars'] = combine_data.loc[combine_data['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
+	# if pd.isna(combine_data.at[k, 'LotFrontage']):  
+	# 	combine_data.at[k, 'LotFrontage'] = np.sqrt(combine_data.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
+	for col in bath_list:
+		if pd.isna(combine_data.at[k, col]):
+			if combine_data.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtFullBath':
+				combine_data.at[k, 'BsmtFullBath'] = combine_data.loc[combine_data['TotalBsmtSF'] > 0, 'BsmtFullBath'].value_counts().idxmax()
+			elif combine_data.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtFullBath':
+				combine_data.at[k, 'BsmtFullBath'] = 0
+			elif combine_data.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtHalfBath':
+				combine_data.at[k, 'BsmtHalfBath'] = combine_data.loc[combine_data['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
+			elif combine_data.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtHalfBath':
+				combine_data.at[k, 'BsmtHalfBath'] = 0
+	for col in bmst_list:
+		if combine_data.loc[k,'Foundation'] == 'Slab' and not (col == 'BsmtUnfSF' or col == 'BsmtFinSF1'):
+			combine_data.at[k, col] = 'Abs'
+	if combine_data.at[k, '2ndFlrSF'] > 0:
+		combine_data.at[k, '2ndFlr'] = 1
+	else:
+		combine_data.at[k, '2ndFlr'] = 0
+	if combine_data.at[k, 'BsmtFinSF2'] > 0:
+		combine_data.at[k, '2ndBsmtFlr'] = 1
+	else:
+		combine_data.at[k, '2ndBsmtFlr'] = 0
+	combine_data.at[k, 'QualitySum'] = 0
+	for l in quality_sum_list:
+		if combine_data.at[k, l] == 'Ex':
+			combine_data.at[k, 'QualitySum'] += 5
+		elif combine_data.at[k, l] == 'Gd':
+			combine_data.at[k, 'QualitySum'] += 4
+		elif combine_data.at[k, l] == 'TA':
+			combine_data.at[k, 'QualitySum'] += 3
+		elif combine_data.at[k, l] == 'Fa':
+			combine_data.at[k, 'QualitySum'] += 2
+		elif combine_data.at[k, l] == 'Po':
+			combine_data.at[k, 'QualitySum'] += 1
+	if combine_data.at[k, 'TotalBsmtSF'] > 0:
+		combine_data.at[k, 'BsmtUnfSF'] =  combine_data.at[k, 'BsmtUnfSF']/combine_data.at[k, 'TotalBsmtSF']
+	if combine_data.at[k, 'TotalBsmtSF'] == 0:
+		combine_data.at[k, 'BsmtFinType1'] = 'Abs'
+		combine_data.at[k, 'BsmtFinType2'] = 'Abs'
+		combine_data.at[k, 'BsmtExposure'] = 'Abs'
+		combine_data.at[k, 'BsmtQual'] = 'Abs'
+		combine_data.at[k, 'BsmtCond'] = 'Abs'
+	combine_data.at[k, 'SinceRenov'] = combine_data.at[k, 'YrSold'] - combine_data.at[k, 'YearRemodAdd']
+	if combine_data.at[k, 'SinceRenov'] < 0:
+		combine_data.at[k, 'SinceRenov'] = 0
+	combine_data.at[k, 'Age'] = combine_data.at[k, 'YrSold'] - combine_data.at[k, 'YearBuilt']
+	if combine_data.at[k, 'Age'] < 0:
+		combine_data.at[k, 'Age'] = 0
+	combine_data.at[k, 'PorchSF'] = combine_data.at[k, 'OpenPorchSF'] + combine_data.at[k, 'EnclosedPorch'] + combine_data.at[k, '3SsnPorch'] + combine_data.at[k, 'ScreenPorch'] + combine_data.at[k, 'WoodDeckSF']
+	# for h in porch_list:
+	# 	if combine_data.at[k, h] > 0:
+	# 		combine_data.at[k, h] = 1
+	# 	else:
+	# 		combine_data.at[k, h] = 0
+	combine_data.at[k, 'Bath_count'] = combine_data.at[k, 'BsmtFullBath'] + combine_data.at[k, 'FullBath'] + 0.5*combine_data.at[k, 'BsmtHalfBath'] + 0.5*combine_data.at[k, 'HalfBath']
+	combine_data.at[k, 'LotFrontage'] = combine_data.at[k, 'LotFrontage'] / np.sqrt(combine_data.at[k,'LotArea'])
+	if pd.isna(combine_data.at[k, 'MSZoning']): #####Fill missing values based on 
+		combine_data.at[k, 'MSZoning'] = 'C (all)'
+		if combine_data.at[k,'YearBuilt'] > 1938:
+			combine_data.at[k, 'MSZoning'] = 'RM'
+		if combine_data.at[k,'YearBuilt'] > 1948:
+			combine_data.at[k, 'MSZoning'] = 'RH'
+		if combine_data.at[k,'YearBuilt'] > 1970:
+			combine_data.at[k, 'MSZoning'] = 'RL'
+		if combine_data.at[k,'YearBuilt'] > 2000:
+			combine_data.at[k, 'MSZoning'] = 'FV'
+	k+=1
+# for col in numeric_list:
+# 	combine_data[col] = pd.to_numeric(combine_data[col])
+
+mis_train = combine_data.isnull().sum()
+print('Columns with missing values after manual filling:')
+print(mis_train[mis_train > 0])		
+for col in combine_data.columns: ####Fill missing values in left over columnt with most frequent value
+	if col not in 'SalePrice':
 		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
-		imputer.fit(i[[col]])
-		i[[col]]= imputer.transform(i[[col]])
-	check += 1
+		imputer.fit(combine_data[[col]])
+		combine_data[[col]] = imputer.transform(combine_data[[col]])
 
-list_empty=train.columns[train.isnull().any()].tolist()
+list_empty=combine_data.columns[combine_data.isnull().any()].tolist()
 missing = []
-for i in list_empty:
-	missing.append([i,train[i].isnull().sum()])
+for col in list_empty:
+	missing.append([col,combine_data[col].isnull().sum()])
 if missing:
-	print('Some values in the training set are still missing!')
+	print('Some values in the data sets are still missing!')
 	print(missing)
 else:
-	print('No missing values in the training set left!')
-
-list_empty=test.columns[test.isnull().any()].tolist()
-missing = []
-for i in list_empty:
-	missing.append([i,test[i].isnull().sum()])
-if missing:
-	print('Some values in the test set are still missing!')
-	print(missing)
-else:
-	print('No missing values in the test set left!')
+	print('No missing values in the data sets left!')
 
 #####CORRELATION MATRIX
 trainMatrix = train.corr()
@@ -306,34 +285,23 @@ sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_before.png')
 plt.close
 
-for col in hot_encode_list:
-	train = pd.concat([train,pd.get_dummies(train[col], prefix=col)],axis=1)
-	train.drop(col,axis=1, inplace=True)
-	test = pd.concat([test,pd.get_dummies(test[col], prefix=col)],axis=1)
-	test.drop(col,axis=1, inplace=True)
+for col in combine_data.columns:
+	if combine_data.dtypes[col] == 'object':
+		combine_data = pd.concat([combine_data,pd.get_dummies(combine_data[col], prefix = col)],axis = 1)
+		combine_data.drop(col, axis=1, inplace=True)
 
-print('\nThe following columns are only present in the train set after hot encoding. Removing:')
-unique_train = list(set(list(train.columns))- set(list(test.columns)))
-unique_train.remove('SalePrice')
-print(unique_train)
-train.drop(unique_train,axis=1, inplace=True)
-
-drop_list_columns.extend(['SaleType_WD', 'SaleCondition_Normal', 'Functional_Typ', 'CentralAir_N', 'Street_Pave', 'PavedDrive_Y', 'Utilities_AllPub'])
-for col in train.columns:
-	if ('_None' in col) or ('_Abs' in col) or (col in drop_list_columns):
-		train.drop([col],axis=1, inplace=True)
-		test.drop([col],axis=1, inplace=True)
+train = combine_data.loc[combine_data['Test'] == 0].copy()
+train.drop('Test', axis=1, inplace=True)
+test = combine_data.loc[combine_data['Test'] == 1].copy()
+test.drop('Test', axis=1, inplace=True)
+test.drop('SalePrice', axis=1, inplace=True)
 
 #####REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
 train.name = 'train'
 test.name = 'test'
 data = [train,test]
 
-label_encoder = preprocessing.LabelEncoder()
-for i in data:
-	for col in i.columns:
-		if i.dtypes[col] == 'object': #####label encode all columns with str
-			i[col]= label_encoder.fit_transform(i[col])
+binary_col_list = return_binary_col(train)
 
 #####HISTOGRAMS CONTINUOUS DATA
 f, ax = plt.subplots(4, 5, figsize=(20, 20))
@@ -460,7 +428,7 @@ plt.savefig('graphs/hist_after_distr.png')
 plt.close
 
 #####FINAL CORRELATION MATRIX
-trainMatrix = train.corr()
+trainMatrix = train[list(set(train.columns) - set(binary_col_list))].corr()
 f, ax = plt.subplots(figsize=(32, 30))
 sn.heatmap(trainMatrix, annot=True)
 plt.savefig('graphs/heatmap_cutoff.png')
@@ -494,38 +462,38 @@ Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####OPTIMIZED RANDOM FOREST REGRESSOR
-estimator = RandomForestRegressor(
-	n_jobs=-1,
-	random_state=666,
-)
+# estimator = RandomForestRegressor(
+# 	n_jobs=-1,
+# 	random_state=666,
+# )
 
-search_space = {
-	'min_samples_split': (2, 10),
-	'min_samples_leaf': (2, 10),
-	'max_depth': (3, 10),
-	'max_features': ['auto', 'sqrt', 'log2', None], ##
-	'n_estimators': (5, 5000),
-}
+# search_space = {
+# 	'min_samples_split': (2, 15),
+# 	'min_samples_leaf': (2, 15),
+# 	'max_depth': (2, 15),
+# 	'max_features': ['auto', 'sqrt', 'log2', None],
+# 	'n_estimators': (5, 5000),
+# }
 
-cv = KFold(n_splits=5, shuffle=True)
-n_iterations = 50
-bayes_cv_tuner = BayesSearchCV(
-	estimator=estimator,
-	search_spaces=search_space,
-	scoring='neg_mean_absolute_error',
-	cv=cv,
-	n_jobs=-1,
-	n_iter=n_iterations,
-	verbose=0,
-	refit=True,
-)
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 100
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_root_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
 
-rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-print('\nOptimized Random Forest Parameters:')
-print(rf_reg_opt.best_params_)
-Y_pred = rf_reg_opt.predict(x_test)
-print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 15), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 5000)
+# rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# print('\nOptimized Random Forest Parameters:')
+# print(rf_reg_opt.best_params_)
+# Y_pred = rf_reg_opt.predict(x_test)
+# print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 13), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 3165)
 
 #####XGBoost REGRESSOR
 xg_reg = xgb.XGBRegressor(colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000)
@@ -545,19 +513,24 @@ plt.close
 
 # search_space = {
 #     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
+#     'eta': (Real(0.01, 0.3, 'log-uniform')),
+#     'gamma': (0.0, 0.5),
 #     'min_child_weight': (0, 10),
-#     'max_depth': (3, 20),
+#     'max_depth': (2, 10),
 #     'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
 #     'min_child_weight': (0, 5),
+#     'reg_lambda': (Real(0.00001,10,'log-uniform')),
+#     'reg_alpha': (Real(0.00001,10,'log-uniform')),
+#     'subsample': (0.5, 1.0),
 #     'n_estimators': (5, 5000),
 # }
 
-# cv = KFold(n_splits=3, shuffle=True)
+# cv = KFold(n_splits=5, shuffle=True)
 # n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
-#     scoring='neg_mean_absolute_error',
+#     scoring='neg_root_mean_squared_error',
 #     cv=cv,
 #     n_jobs=-1,
 #     n_iter=n_iterations,
@@ -570,7 +543,7 @@ plt.close
 # print(xg_reg_opt.best_params_)
 # Y_pred = xg_reg_opt.predict(x_test)
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost: ('colsample_bytree', 0.18258981575390182), ('learning_rate', 0.017637427180919204), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 2928)
+## Best parameters XGBoost: ('colsample_bytree', 0.08652163908865458), ('eta', 0.29999999999999993), ('gamma', 0.0), ('learning_rate', 0.0296450572630713), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 995)
 
 #####CatBoost REGRESSOR
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000)
@@ -585,8 +558,8 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 
 # search_space = {
 #     'learning_rate': (Real(0.01, 0.3, 'log-uniform')),
-#     'max_depth': (3, 16),
-#     'l2_leaf_reg': (1, 30),
+#     'max_depth': (3, 10),
+#     'l2_leaf_reg': (0.2, 30),
 #     'iterations': (20, 2000),
 # }
 
@@ -595,7 +568,7 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
-#     scoring='neg_mean_absolute_error',
+#     scoring='neg_root_mean_squared_error',
 #     cv=cv,
 #     n_jobs=-1,
 #     n_iter=n_iterations,
