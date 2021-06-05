@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
 
+import shap
+
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing 
 from sklearn import metrics
@@ -356,7 +358,7 @@ for i in data:
 			i.drop(col, axis=1, inplace=True)
 		except:
 			pass
-	i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
+	#i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
 #####ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES
 high_corr, drop_corr = correlation_columns(train, 'SalePrice', 0.7, 0.95)
@@ -461,6 +463,14 @@ rf_reg.fit(x_train,y_train)
 Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+explainer = shap.Explainer(rf_reg)
+shap_values = explainer(x_train)
+f, ax = plt.subplots(figsize=(20, 10))
+shap.plots.beeswarm(shap_values, show=False)
+plt.savefig('graphs/RF_shapley.png')
+plt.close
+
+
 #####OPTIMIZED RANDOM FOREST REGRESSOR
 # estimator = RandomForestRegressor(
 # 	n_jobs=-1,
@@ -496,7 +506,7 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 ## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 13), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 3165)
 
 #####XGBoost REGRESSOR
-xg_reg = xgb.XGBRegressor(colsample_bytree = 0.3, learning_rate = 0.05,max_depth = 5, n_estimators = 1000)
+xg_reg = xgb.XGBRegressor(n_estimators = 1000)
 xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
 print('Accuracy XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -525,7 +535,7 @@ plt.close
 #     'n_estimators': (5, 5000),
 # }
 
-# cv = KFold(n_splits=5, shuffle=True)
+# cv = KFold(n_splits=3, shuffle=True)
 # n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
@@ -543,7 +553,7 @@ plt.close
 # print(xg_reg_opt.best_params_)
 # Y_pred = xg_reg_opt.predict(x_test)
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost: ('colsample_bytree', 0.08652163908865458), ('eta', 0.29999999999999993), ('gamma', 0.0), ('learning_rate', 0.0296450572630713), ('max_depth', 3), ('min_child_weight', 4), ('n_estimators', 995)
+## Best parameters XGBoost: ('colsample_bytree', 0.08574871929990954), ('eta', 0.02496390391475763), ('gamma', 0.0), ('learning_rate', 0.01), ('max_depth', 2), ('min_child_weight', 5), ('n_estimators', 3641), ('reg_alpha', 1e-05), ('reg_lambda', 10.0), ('subsample', 0.7091974877458219)
 
 #####CatBoost REGRESSOR
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000)
@@ -581,7 +591,7 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print(cb_reg_opt.best_params_)
 # Y_pred = cb_reg_opt.predict(x_test)
 # print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters: ('iterations', 1875), ('l2_leaf_reg', 30), ('learning_rate', 0.022068113971935165), ('max_depth', 3)
+## Best parameters: ('iterations', 2000), ('l2_leaf_reg', 9.891787470253881), ('learning_rate', 0.04348215118502706), ('max_depth', 4)
 
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
 predict_export = pd.DataFrame()
