@@ -135,7 +135,6 @@ print(combine_data.groupby('MSZoning', as_index=False)['YearBuilt'].mean())
 print(combine_data.groupby('MSZoning', as_index=False)['Neighborhood'].apply(lambda x: x.value_counts().head(1)))
 print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 
-continuous_list = ['SalePrice','LotArea','LotFrontage','Age','GrLivArea','TotalBsmtSF','MasVnrArea','BsmtFinSF1','BsmtFinSF2','1stFlrSF','2ndFlrSF','GarageArea','PorchSF','QualitySum','OverallQual','SinceRenov']
 garage_list = ['GarageType','GarageFinish','GarageQual','GarageCond']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
@@ -158,6 +157,20 @@ combine_data.loc[combine_data['LotFrontage'].isna(), 'LotFrontage'] = 0
 combine_data.loc[combine_data['GarageYrBlt'].isna(), 'GarageYrBlt'] = 0
 combine_data.loc[combine_data['GarageArea'].isna(), 'GarageArea'] = 0
 combine_data.loc[combine_data['GarageCars'].isna(), 'GarageCars'] = 0
+
+combine_data.loc[combine_data['MoSold'] == (12 or 1 or 2), 'MoSold'] = 'Winter'
+combine_data.loc[combine_data['MoSold'] == (3 or 4 or 5), 'MoSold'] = 'Spring'
+combine_data.loc[combine_data['MoSold'] == (6 or 7 or 8), 'MoSold'] = 'Summer'
+combine_data.loc[combine_data['MoSold'] == (9 or 10 or 11), 'MoSold'] = 'Fall'
+
+combine_data['MSSubClass'] = combine_data['MSSubClass'].astype(str)
+
+# combine_data.loc[combine_data['GarageCars'] == 0 , 'GarageCars'] = 'Abs'
+# combine_data.loc[combine_data['GarageCars'] == 1 , 'GarageCars'] = 'One'
+# combine_data.loc[combine_data['GarageCars'] == 2 , 'GarageCars'] = 'Two'
+# combine_data.loc[combine_data['GarageCars'] == 3 , 'GarageCars'] = 'Three'
+# combine_data.loc[combine_data['GarageCars'] == 4 , 'GarageCars'] = 'Four'
+
 
 k = 0
 while k < len(combine_data):
@@ -205,10 +218,6 @@ while k < len(combine_data):
 	for col in bmst_list:
 		if combine_data.loc[k,'Foundation'] == 'Slab' and not (col == 'BsmtUnfSF' or col == 'BsmtFinSF1'):
 			combine_data.at[k, col] = 'Abs'
-	if combine_data.at[k, '2ndFlrSF'] > 0:
-		combine_data.at[k, '2ndFlr'] = 1
-	else:
-		combine_data.at[k, '2ndFlr'] = 0
 	if combine_data.at[k, 'BsmtFinSF2'] > 0:
 		combine_data.at[k, '2ndBsmtFlr'] = 1
 	else:
@@ -240,11 +249,6 @@ while k < len(combine_data):
 	if combine_data.at[k, 'Age'] < 0:
 		combine_data.at[k, 'Age'] = 0
 	combine_data.at[k, 'PorchSF'] = combine_data.at[k, 'OpenPorchSF'] + combine_data.at[k, 'EnclosedPorch'] + combine_data.at[k, '3SsnPorch'] + combine_data.at[k, 'ScreenPorch'] + combine_data.at[k, 'WoodDeckSF']
-	# for h in porch_list:
-	# 	if combine_data.at[k, h] > 0:
-	# 		combine_data.at[k, h] = 1
-	# 	else:
-	# 		combine_data.at[k, h] = 0
 	combine_data.at[k, 'Bath_count'] = combine_data.at[k, 'BsmtFullBath'] + combine_data.at[k, 'FullBath'] + 0.5*combine_data.at[k, 'BsmtHalfBath'] + 0.5*combine_data.at[k, 'HalfBath']
 	combine_data.at[k, 'LotFrontage'] = combine_data.at[k, 'LotFrontage'] / np.sqrt(combine_data.at[k,'LotArea'])
 	if pd.isna(combine_data.at[k, 'MSZoning']): #####Fill missing values based on 
@@ -258,8 +262,17 @@ while k < len(combine_data):
 		if combine_data.at[k,'YearBuilt'] > 2000:
 			combine_data.at[k, 'MSZoning'] = 'FV'
 	k+=1
-# for col in numeric_list:
-# 	combine_data[col] = pd.to_numeric(combine_data[col])
+
+#####CONVERT PORCH FEATURES TO BINARY
+for col in porch_list:
+	combine_data.loc[combine_data[col] > 0, col] = 1
+	combine_data.loc[combine_data[col] == 0, col] = 0
+i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
+
+#####DROP COLUMNS THAT HAVE BEEN USED FOR ENGINEERRING
+drop_eng_list = ['YrSold', 'YearBuilt', 'YearRemodAdd', 'PoolArea']
+drop_eng_list.extend([*bath_list, *garage_list])
+combine_data.drop(drop_eng_list, axis=1, inplace=True)
 
 mis_train = combine_data.isnull().sum()
 print('Columns with missing values after manual filling:')
@@ -306,19 +319,19 @@ data = [train,test]
 binary_col_list = return_binary_col(train)
 
 #####HISTOGRAMS CONTINUOUS DATA
-f, ax = plt.subplots(4, 5, figsize=(20, 20))
+f, ax = plt.subplots(5, 6, figsize=(30, 25))
 l=1
-for i in [element for element in continuous_list if element in train]:
-	ax = plt.subplot(4,5,l)
-	sn.histplot(data=train[i])
-	ax.set_title(i)
+for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,6,l)
+	sn.histplot(data=train[col])
+	ax.set_title(col)
 	l+=1
 f.tight_layout()
 plt.savefig('graphs/hist_num.png')
 plt.close
 
 #####TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
-transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF','1stFlrSF','GarageArea','PorchSF']
+transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF', '1stFlrSF','2ndFlrSF', 'GarageArea','PorchSF', 'BsmtFinSF1', 'BsmtFinSF2', 'MiscVal', 'MiscVnrArea']
 for i in data:
 	for col in [element for element in transform_list if element in train]:
 		if i.name == 'test' and col == 'SalePrice':
@@ -328,10 +341,10 @@ for i in data:
 		else:
 			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
 
-f, ax = plt.subplots(4, 5, figsize=(20, 20))
+f, ax = plt.subplots(5, 6, figsize=(25, 20))
 l=1
-for i in [element for element in continuous_list if element in train]:
-	ax = plt.subplot(4,5,l)
+for i in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,6,l)
 	sn.histplot(data=train[i])
 	ax.set_title(i)
 	l+=1
@@ -339,26 +352,15 @@ f.tight_layout()
 plt.savefig('graphs/hist_num_quantile.png')
 plt.close
 
-f, ax = plt.subplots(4, 5, figsize=(20, 20))
+f, ax = plt.subplots(5, 6, figsize=(25, 20))
 l=1
-for i in [element for element in continuous_list if element in train]:
-	ax = plt.subplot(4,5,l)
+for i in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,6,l)
 	sn.boxplot(data=train[i])
 	ax.set_title(i)
 	l+=1
 plt.savefig('graphs/box_num_quantile.png')
 plt.close
-
-#####DELETE DEFINE COLUMNS
-for i in data:
-	for col in bath_list:
-		i.drop(col, axis=1, inplace=True)
-	for col in garage_list:
-		try:
-			i.drop(col, axis=1, inplace=True)
-		except:
-			pass
-	#i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
 #####ANALYZE CORRELATION BETWEEN FEATURES; REMOVE HIGH CORRELATION FEATURES
 high_corr, drop_corr = correlation_columns(train, 'SalePrice', 0.7, 0.95)
@@ -386,16 +388,19 @@ print('\nOutliers in continuous features (3*IQR):')
 [print(key,':',value) for key, value in cont_outlier.items()]
 
 #####SCATTER PLOT CONTINUOUS FEATURES
-f, ax = plt.subplots(4, 4, figsize=(20, 20))
+f, ax = plt.subplots(5, 5, figsize=(20, 20))
 l=1
-for col in [element for element in continuous_list if element in train]:
-	ax = plt.subplot(4,4,l)
+for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,5,l)
 	sn.scatterplot(x=col,y='SalePrice',data=train)
 	ax.set_title(col)
 	l+=1
 f.tight_layout()
 plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
+
+#####DROP COLUMNS WITH NO CORRELATION TO PRICE, BASED ON PREVIOUS SCATTER PLOT
+drop_scatter_list = ['KitchenAbvGrd', 'BsmtFinSF2', 'MiscVal', 'LowQualFinSF']
 
 #####REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
 outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
@@ -418,16 +423,18 @@ print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
 
 #####FINAL HISTOGRAMS SHWOING DISTRIBUTION OF CONTINUOUS FEATURES
-f, ax = plt.subplots(4, 4, figsize=(20, 20))
+f, ax = plt.subplots(5, 5, figsize=(25, 25))
 l=1
-for col in [element for element in continuous_list if element in train]:
-	ax = plt.subplot(4,4,l)
+for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,5,l)
 	sn.histplot(data=train[col],kde=True)
 	ax.set_title(col)
 	l+=1
 f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
+
+#####DROP CONTINUOUS FEATURES WITH LOW CORRELATION
 
 #####FINAL CORRELATION MATRIX
 trainMatrix = train[list(set(train.columns) - set(binary_col_list))].corr()
@@ -465,8 +472,8 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 
 explainer = shap.Explainer(rf_reg)
 shap_values = explainer(x_train)
-f, ax = plt.subplots(figsize=(20, 10))
-shap.plots.beeswarm(shap_values, show=False)
+f, ax = plt.subplots(figsize=(25, 20))
+shap.plots.beeswarm(shap_values, max_display=20, show=False)
 plt.savefig('graphs/RF_shapley.png')
 plt.close
 
