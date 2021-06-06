@@ -138,7 +138,7 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 garage_list = ['GarageType','GarageFinish','GarageQual','GarageCond']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
-bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2','BsmtUnfSF','BsmtFinSF1']
+bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
 
 #####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
@@ -153,23 +153,31 @@ for col in garage_list:
 	combine_data.loc[combine_data[col].isna(), col] = 'Abs'
 
 combine_data.loc[combine_data['TotalBsmtSF'].isna(), 'TotalBsmtSF'] = 0
+combine_data.loc[combine_data['TotalBsmtSF'] == 0, 'BsmtUnfSF'] = 0
+combine_data.loc[combine_data['TotalBsmtSF'] == 0, 'BsmtFinSF1'] = 0
+combine_data.loc[combine_data['TotalBsmtSF'] == 0, 'BsmtFinSF2'] = 0
 combine_data.loc[combine_data['LotFrontage'].isna(), 'LotFrontage'] = 0
 combine_data.loc[combine_data['GarageYrBlt'].isna(), 'GarageYrBlt'] = 0
 combine_data.loc[combine_data['GarageArea'].isna(), 'GarageArea'] = 0
 combine_data.loc[combine_data['GarageCars'].isna(), 'GarageCars'] = 0
+
+combine_data['QualCond'] = combine_data['OverallQual'] * combine_data['OverallCond']
 
 combine_data.loc[combine_data['MoSold'] == (12 or 1 or 2), 'MoSold'] = 'Winter'
 combine_data.loc[combine_data['MoSold'] == (3 or 4 or 5), 'MoSold'] = 'Spring'
 combine_data.loc[combine_data['MoSold'] == (6 or 7 or 8), 'MoSold'] = 'Summer'
 combine_data.loc[combine_data['MoSold'] == (9 or 10 or 11), 'MoSold'] = 'Fall'
 
-combine_data['MSSubClass'] = combine_data['MSSubClass'].astype(str)
+combine_data.loc[combine_data['GarageCars'] == 0 , 'GarageCars'] = 'Abs'
+combine_data.loc[combine_data['GarageCars'] == 1 , 'GarageCars'] = 'One'
+combine_data.loc[combine_data['GarageCars'] == 2 , 'GarageCars'] = 'Two'
+combine_data.loc[combine_data['GarageCars'] == 3 , 'GarageCars'] = 'Three'
+combine_data.loc[combine_data['GarageCars'] == 4 , 'GarageCars'] = 'Four'
 
-# combine_data.loc[combine_data['GarageCars'] == 0 , 'GarageCars'] = 'Abs'
-# combine_data.loc[combine_data['GarageCars'] == 1 , 'GarageCars'] = 'One'
-# combine_data.loc[combine_data['GarageCars'] == 2 , 'GarageCars'] = 'Two'
-# combine_data.loc[combine_data['GarageCars'] == 3 , 'GarageCars'] = 'Three'
-# combine_data.loc[combine_data['GarageCars'] == 4 , 'GarageCars'] = 'Four'
+as_string_list = ['MoSold', 'MSSubClass', 'GarageCars']
+for col in as_string_list:
+	combine_data[col] = combine_data[col].astype(str)
+
 
 
 k = 0
@@ -215,9 +223,6 @@ while k < len(combine_data):
 				combine_data.at[k, 'BsmtHalfBath'] = combine_data.loc[combine_data['TotalBsmtSF'] > 0, 'BsmtHalfBath'].value_counts().idxmax()
 			elif combine_data.at[k, 'TotalBsmtSF'] == 0 and col == 'BsmtHalfBath':
 				combine_data.at[k, 'BsmtHalfBath'] = 0
-	for col in bmst_list:
-		if combine_data.loc[k,'Foundation'] == 'Slab' and not (col == 'BsmtUnfSF' or col == 'BsmtFinSF1'):
-			combine_data.at[k, col] = 'Abs'
 	if combine_data.at[k, 'BsmtFinSF2'] > 0:
 		combine_data.at[k, '2ndBsmtFlr'] = 1
 	else:
@@ -400,7 +405,7 @@ plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
 
 #####DROP COLUMNS WITH NO CORRELATION TO PRICE, BASED ON PREVIOUS SCATTER PLOT
-drop_scatter_list = ['KitchenAbvGrd', 'BsmtFinSF2', 'MiscVal', 'LowQualFinSF']
+drop_scatter_list = ['KitchenAbvGrd', 'BsmtFinSF2', 'MiscVal', 'LowQualFinSF', 'BedRoomAbvGrd']
 
 #####REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
 outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
@@ -464,36 +469,27 @@ linreg = LinearRegression()
 linreg.fit(x_train_lin, y_train)
 Y_pred = linreg.predict(x_test_lin)
 print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
 #####RANDOM FOREST REGRESSOR
 rf_reg=RandomForestRegressor(n_estimators= 1000, random_state=666)
 rf_reg.fit(x_train,y_train)
 Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-explainer = shap.Explainer(rf_reg)
-shap_values = explainer(x_train)
-f, ax = plt.subplots(figsize=(25, 20))
-shap.plots.beeswarm(shap_values, max_display=20, show=False)
-plt.savefig('graphs/RF_shapley.png')
-plt.close
-
-
 #####OPTIMIZED RANDOM FOREST REGRESSOR
 # estimator = RandomForestRegressor(
 # 	n_jobs=-1,
 # 	random_state=666,
 # )
-
 # search_space = {
 # 	'min_samples_split': (2, 15),
 # 	'min_samples_leaf': (2, 15),
-# 	'max_depth': (2, 15),
+# 	'max_depth': (2, 10),
 # 	'max_features': ['auto', 'sqrt', 'log2', None],
 # 	'n_estimators': (5, 5000),
 # }
-
-# cv = KFold(n_splits=5, shuffle=True)
-# n_iterations = 100
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 # 	estimator=estimator,
 # 	search_spaces=search_space,
@@ -506,11 +502,31 @@ plt.close
 # )
 
 # rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
-# print('\nOptimized Random Forest Parameters:')
-# print(rf_reg_opt.best_params_)
-# Y_pred = rf_reg_opt.predict(x_test)
-# print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 13), ('max_features', None), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 3165)
+
+## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 10), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 8), ('n_estimators', 4686)
+rf_reg_opt=RandomForestRegressor(n_estimators= 4686, max_depth = 10, max_features = 'auto', min_samples_leaf = 2, min_samples_split = 8, random_state=666)
+rf_reg_opt.fit(x_train,y_train)
+Y_pred=rf_reg_opt.predict(x_test)
+Y_pred = rf_reg_opt.predict(x_test)
+print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+#####DETERMINE FEATURE IMPORTANCE
+# explainer = shap.TreeExplainer(rf_reg_opt)
+# shap_values = explainer(x_train)
+# f, ax = plt.subplots(figsize=(25, 25))
+# shap.plots.beeswarm(shap_values, max_display=20, show=False)
+# plt.savefig('graphs/RF_shapley.png')
+# plt.close
+
+# vals = np.abs(shap_values.values).mean(0)
+# feature_names = x_train.columns
+# feature_importance = pd.DataFrame(list(zip(feature_names, vals)), columns=['col_name','feature_importance_vals'])
+# feature_importance.sort_values(by=['feature_importance_vals'], ascending=False, inplace=True)
+# print(feature_importance)
+
+# low_importance = list(feature_importance.loc[feature_importance['feature_importance_vals'] < 0.0001, 'col_name'])
+# x_train_rf = x_train.drop(low_importance, axis = 1)
+# x_test_rf = x_test.drop(low_importance, axis = 1)
 
 #####XGBoost REGRESSOR
 xg_reg = xgb.XGBRegressor(n_estimators = 1000)
@@ -560,7 +576,12 @@ plt.close
 # print(xg_reg_opt.best_params_)
 # Y_pred = xg_reg_opt.predict(x_test)
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost: ('colsample_bytree', 0.08574871929990954), ('eta', 0.02496390391475763), ('gamma', 0.0), ('learning_rate', 0.01), ('max_depth', 2), ('min_child_weight', 5), ('n_estimators', 3641), ('reg_alpha', 1e-05), ('reg_lambda', 10.0), ('subsample', 0.7091974877458219)
+## Best parameters XGBoost: ('colsample_bytree', 0.1808435156234171), ('eta', 0.01), ('gamma', 0.0), ('learning_rate', 0.01), ('max_depth', 4), ('min_child_weight', 0), ('n_estimators', 1375), ('reg_alpha', 1e-05), ('reg_lambda', 0.03219077770797261), ('subsample', 0.5)
+
+xg_reg_opt = xgb.XGBRegressor(n_estimators = 1375, colsample_bytree = 0.1808435156234171, eta = 0.01, gamma = 0.0, learning_rate = 0.01, max_depth = 4, min_child_weight = 0, reg_alpha = 1e-05, reg_lambda = 0.03219077770797261, subsample = 0.5)
+xg_reg_opt.fit(x_train,y_train)
+Y_pred = xg_reg_opt.predict(x_test)
+print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####CatBoost REGRESSOR
 cb_reg = cbr.CatBoostRegressor(n_estimators = 1000)
@@ -575,9 +596,9 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 
 # search_space = {
 #     'learning_rate': (Real(0.01, 0.3, 'log-uniform')),
-#     'max_depth': (3, 10),
+#     'max_depth': (3, 12),
 #     'l2_leaf_reg': (0.2, 30),
-#     'iterations': (20, 2000),
+#     'iterations': (20, 5000),
 # }
 
 # cv = KFold(n_splits=3, shuffle=True)
@@ -597,8 +618,8 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print('\nOptimized CatBoost Parameters:')
 # print(cb_reg_opt.best_params_)
 # Y_pred = cb_reg_opt.predict(x_test)
-# print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters: ('iterations', 2000), ('l2_leaf_reg', 9.891787470253881), ('learning_rate', 0.04348215118502706), ('max_depth', 4)
+print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Best parameters: ('iterations', 1154), ('l2_leaf_reg', 0.2), ('learning_rate', 0.04788923763413573), ('max_depth', 5)
 
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
 predict_export = pd.DataFrame()
