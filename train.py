@@ -19,6 +19,7 @@ from skopt.space import Real
 
 import xgboost as xgb
 import catboost as cbr
+import lightgbm as lgb
 
 #####FUNCTIONS
 def correlation_columns(df, target_feature, cor_limit, drop_limit):
@@ -488,7 +489,7 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # 	'max_features': ['auto', 'sqrt', 'log2', None],
 # 	'n_estimators': (5, 5000),
 # }
-# cv = KFold(n_splits=3, shuffle=True)
+# cv = KFold(n_splits=3, shuffle=False)
 # n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 # 	estimator=estimator,
@@ -534,7 +535,7 @@ xg_reg.fit(x_train,y_train)
 Y_pred = xg_reg.predict(x_test)
 print('Accuracy XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 f,ax = plt.subplots(figsize=(10,10))
-xgb.plot_importance(xg_reg,ax=ax,color='red')
+xgb.plot_importance(xg_reg,ax=ax,color='red', max_num_features=20)
 plt.savefig('graphs/feature_contribution_xgboost.png')
 plt.close
 
@@ -558,7 +559,7 @@ plt.close
 #     'n_estimators': (5, 5000),
 # }
 
-# cv = KFold(n_splits=3, shuffle=True)
+# cv = KFold(n_splits=3, shuffle=False)
 # n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
@@ -598,10 +599,10 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 #     'learning_rate': (Real(0.01, 0.3, 'log-uniform')),
 #     'max_depth': (3, 12),
 #     'l2_leaf_reg': (0.2, 30),
-#     'iterations': (20, 5000),
+#     'n_estimators': (20, 5000),
 # }
 
-# cv = KFold(n_splits=3, shuffle=True)
+# cv = KFold(n_splits=3, shuffle=False)
 # n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
@@ -618,8 +619,59 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print('\nOptimized CatBoost Parameters:')
 # print(cb_reg_opt.best_params_)
 # Y_pred = cb_reg_opt.predict(x_test)
+# print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Best parameters: ('n_estimators', 1154), ('l2_leaf_reg', 0.2), ('learning_rate', 0.04788923763413573), ('max_depth', 5)
+
+cb_reg_opt = cbr.CatBoostRegressor(n_estimators = 1154, l2_leaf_reg = 0.2, learning_rate = 0.04788923763413573, max_depth = 5)
+cb_reg_opt.fit(x_train,y_train,silent=True)
+Y_pred = cb_reg_opt.predict(x_test)
 print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters: ('iterations', 1154), ('l2_leaf_reg', 0.2), ('learning_rate', 0.04788923763413573), ('max_depth', 5)
+
+#####LightGBM REGRESSOR
+lgb_reg = lgb.LGBMRegressor(n_estimators = 1000, objective = 'regression')
+lgb_reg.fit(x_train,y_train)
+Y_pred = lgb_reg.predict(x_test)
+print('Accuracy LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+####OPTIMIZED LightGBM REGRESSOR
+# estimator = lgb.LGBMRegressor(
+#     n_jobs=-1,
+#     objective = 'regression',
+#     verbosity=-1,
+# )
+
+# search_space = {
+#     'learning_rate': (Real(0.001, 0.3, 'log-uniform')),
+#     'max_depth': (2, 12),
+#     'num_leaves': (20, 200),
+#     'min_data_in_leaf': (10, 200),
+#     'n_estimators': (20, 5000),
+# }
+
+# cv = KFold(n_splits=5, shuffle=False)
+# n_iterations = 100
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_root_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
+
+# lgb_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# print('\nOptimized LightGBM Parameters:')
+# print(lgb_reg_opt.best_params_)
+# Y_pred = lgb_reg_opt.predict(x_test)
+# print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Best parameters: ('learning_rate', 0.016414771531206136), ('max_depth', 2), ('min_data_in_leaf', 10), ('n_estimators', 3608), ('num_leaves', 200)
+
+lgb_reg_opt = lgb.LGBMRegressor(n_estimators = 3608, objective = 'regression', learning_rate = 0.016414771531206136, max_depth = 2, min_data_in_leaf = 10, num_leaves = 200)
+lgb_reg_opt.fit(x_train,y_train)
+Y_pred = lgb_reg_opt.predict(x_test)
+print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
 predict_export = pd.DataFrame()
