@@ -673,11 +673,66 @@ lgb_reg_opt.fit(x_train,y_train)
 Y_pred = lgb_reg_opt.predict(x_test)
 print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+####TRAIN XGB REGRESSOR WITH ALL TRAIN DATA
+estimator = xgb.XGBRegressor(
+    n_jobs=-1,
+    verbosity=0,
+)
+
+search_space = {
+    'learning_rate': (Real(0.001, 1.0, 'log-uniform')),
+    'eta': (Real(0.1, 0.5, 'log-uniform')),
+    'gamma': (0.0, 0.5),
+    'min_child_weight': (0, 10),
+    'max_depth': (2, 12),
+    'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
+    'min_child_weight': (0, 5),
+    'reg_lambda': (Real(0.00001,1,'log-uniform')),
+    'reg_alpha': (Real(0.00001,1,'log-uniform')),
+    'subsample': (0.5, 1.0),
+    'n_estimators': (5, 5000),
+}
+
+cv = KFold(n_splits=5, shuffle=True)
+n_iterations = 50
+bayes_cv_tuner = BayesSearchCV(
+    estimator=estimator,
+    search_spaces=search_space,
+    scoring='neg_root_mean_squared_error',
+    cv=cv,
+    n_jobs=-1,
+    n_iter=n_iterations,
+    verbose=0,
+    refit=True,
+)
+
+xg_reg_all_data = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+print('\nOptimized XGBoost Parameters for All Data:')
+print(xg_reg_all_data.best_params_)
+Y_pred = xg_reg_all_data.predict(x_test)
+print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+# xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.02206560306361786, colsample_bytree = 0.13229035226856173, eta = 0.07009800269441162, gamma= 0.0, max_depth = 2, min_child_weight = 0, n_estimators = 2441, reg_alpha = 1e-05, reg_lambda = 3.1417848320047077, subsample = 0.7286057220169017)
+# xg_reg_all_data.fit(X_train,Y_train)
+# Y_pred = xg_reg_all_data.predict(x_test)
+# print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+##('colsample_bytree', 1.0), ('eta', 0.01), ('gamma', 0.0), ('learning_rate', 0.03617403978211306), ('max_depth', 2), ('min_child_weight', 2), ('n_estimators', 1885), ('reg_alpha', 1e-05), ('reg_lambda', 0.00038450044163168285), ('subsample', 0.6114543006399086)
+##Model #100
+##Best so far: -0.1113
+##Best parameters so far: OrderedDict([('colsample_bytree', 0.13229035226856173), ('eta', 0.07009800269441162), ('gamma', 0.0), ('learning_rate', 0.02206560306361786), ('max_depth', 2), ('min_child_weight', 0), ('n_estimators', 2441), ('reg_alpha', 1e-05), ('reg_lambda', 3.1417848320047077), ('subsample', 0.7286057220169017)])
+
+
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
 predict_export = pd.DataFrame()
 predict_export['Id'] = test['Id']
-
 prediction_catboost = cb_reg.predict(test.drop('Id', axis=1))
 prediction_catboost = np.expm1(prediction_catboost)
 predict_export['SalePrice'] = prediction_catboost
-predict_export.to_csv('submission.csv',index=False)
+predict_export.to_csv('submission_cb.csv',index=False)
+
+predict_export = pd.DataFrame()
+predict_export['Id'] = test['Id']
+prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
+prediction_xgboost = np.expm1(prediction_xgboost)
+predict_export['SalePrice'] = prediction_xgboost
+predict_export.to_csv('submission_xgb_all.csv',index=False)
