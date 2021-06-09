@@ -5,9 +5,9 @@ plt.rcParams.update({'figure.max_open_warning': 0})
 import seaborn as sn
 
 import shap
-
-from sklearn.impute import SimpleImputer
-from sklearn import preprocessing 
+from sklearn import preprocessing
+from sklearn.preprocessing import PowerTransformer
+from sklearn.preprocessing import MinMaxScaler
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
@@ -139,7 +139,7 @@ print(combine_data.groupby('MasVnrType', as_index=False)['OverallQual'].mean())
 garage_list = ['GarageType','GarageFinish','GarageQual','GarageCond']
 quality_sum_list =['ExterQual','BsmtQual','HeatingQC','KitchenQual','FireplaceQu','GarageQual','ExterCond', 'BsmtCond', 'GarageCond', 'PoolQC']
 bath_list = ['BsmtFullBath','BsmtHalfBath','FullBath','HalfBath']
-bmst_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
+bsmt_list = ['BsmtQual','BsmtCond','BsmtExposure','BsmtFinType1','BsmtFinType2']
 porch_list = ['OpenPorchSF','ScreenPorch','EnclosedPorch','3SsnPorch','WoodDeckSF']
 
 #####FEATURE ENGINEERING; FILL MISSING DATA MANUALLY
@@ -161,6 +161,16 @@ combine_data.loc[combine_data['LotFrontage'].isna(), 'LotFrontage'] = 0
 combine_data.loc[combine_data['GarageYrBlt'].isna(), 'GarageYrBlt'] = 0
 combine_data.loc[combine_data['GarageArea'].isna(), 'GarageArea'] = 0
 combine_data.loc[combine_data['GarageCars'].isna(), 'GarageCars'] = 0
+combine_data.loc[combine_data['MasVnrArea'].isna(), 'MasVnrArea'] = 0
+
+combine_data.loc[combine_data['Electrical'].isna(), 'Electrical'] = 'SBrkr'
+combine_data.loc[combine_data['Functional'].isna(), 'Functional'] = 'Typ'
+combine_data.loc[combine_data['Utilities'].isna(), 'Utilities'] = 'AllPub'
+combine_data.loc[combine_data['SaleType'].isna(), 'SaleType'] = 'WD'
+combine_data.loc[combine_data['Exterior1st'].isna(), 'Exterior1st'] = 'Plywood'
+combine_data.loc[combine_data['Exterior2nd'].isna(), 'Exterior2nd'] = 'Plywood'
+
+combine_data.loc[combine_data['KitchenQual'].isna(), 'KitchenQual'] = combine_data.loc[combine_data['KitchenAbvGr'] == 1, 'KitchenQual'].value_counts().idxmax()
 
 combine_data['QualCond'] = combine_data['OverallQual'] * combine_data['OverallCond']
 
@@ -175,11 +185,6 @@ combine_data.loc[combine_data['GarageCars'] == 2 , 'GarageCars'] = 'Two'
 combine_data.loc[combine_data['GarageCars'] == 3 , 'GarageCars'] = 'Three'
 combine_data.loc[combine_data['GarageCars'] == 4 , 'GarageCars'] = 'Four'
 
-as_string_list = ['MoSold', 'MSSubClass', 'GarageCars']
-for col in as_string_list:
-	combine_data[col] = combine_data[col].astype(str)
-
-
 
 k = 0
 while k < len(combine_data):
@@ -187,22 +192,6 @@ while k < len(combine_data):
 		combine_data.at[k,'Pool'] = 1
 	else:
 		combine_data.at[k,'Pool'] = 0
-	# if pd.isna(combine_data.at[k, 'MiscFeature']):
-	# 	combine_data.at[k, 'MiscFeature'] = 0
-	# else:
-	# 	combine_data.at[k, 'MiscFeature'] = 1
-	# if pd.isna(combine_data.at[k, 'MasVnrType']): ######Feature depends on OverallQual; use it as criterion to fill missing values
-	# 	if combine_data.at[k, 'OverallQual'] == 7:
-	# 		combine_data.at[k, 'MasVnrType'] = 'BrkFace'
-	# 	elif combine_data.at[k, 'OverallQual'] > 7:
-	# 		combine_data.at[k, 'MasVnrType'] = 'Stone'
-	# 	else:
-	# 		combine_data.at[k, 'MasVnrType'] = 'Abs'
-	if pd.isna(combine_data.at[k, 'MasVnrArea']): ######No strong correlation with any other feature, fill with data mean
-		if combine_data.at[k, 'MasVnrType'] != 'Abs':
-			combine_data.at[k, 'MasVnrArea'] = combine_data.loc[combine_data['MasVnrArea'] > 0, 'MasVnrArea'].mean()
-		else:
-			combine_data.at[k, 'MasVnrArea'] = 0
 	# if pd.isna(combine_data.at[k, 'LotFrontage']): ######No strong correlation with any other feature, fill with data mean
 	# 	combine_data.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
 	# for col in garage_list:
@@ -242,12 +231,11 @@ while k < len(combine_data):
 			combine_data.at[k, 'QualitySum'] += 1
 	if combine_data.at[k, 'TotalBsmtSF'] > 0:
 		combine_data.at[k, 'BsmtUnfSF'] =  combine_data.at[k, 'BsmtUnfSF']/combine_data.at[k, 'TotalBsmtSF']
-	if combine_data.at[k, 'TotalBsmtSF'] == 0:
-		combine_data.at[k, 'BsmtFinType1'] = 'Abs'
-		combine_data.at[k, 'BsmtFinType2'] = 'Abs'
-		combine_data.at[k, 'BsmtExposure'] = 'Abs'
-		combine_data.at[k, 'BsmtQual'] = 'Abs'
-		combine_data.at[k, 'BsmtCond'] = 'Abs'
+	for col in bsmt_list:
+		if combine_data.at[k, 'TotalBsmtSF'] == 0:
+			combine_data.at[k, col] = 'Abs'
+		elif (pd.isna(combine_data.at[k, col])) and (combine_data.at[k, 'TotalBsmtSF'] > 0):
+			combine_data.at[k, col] = combine_data.loc[combine_data['TotalBsmtSF'] > 0, col].value_counts().idxmax()
 	combine_data.at[k, 'SinceRenov'] = combine_data.at[k, 'YrSold'] - combine_data.at[k, 'YearRemodAdd']
 	if combine_data.at[k, 'SinceRenov'] < 0:
 		combine_data.at[k, 'SinceRenov'] = 0
@@ -256,7 +244,7 @@ while k < len(combine_data):
 		combine_data.at[k, 'Age'] = 0
 	combine_data.at[k, 'PorchSF'] = combine_data.at[k, 'OpenPorchSF'] + combine_data.at[k, 'EnclosedPorch'] + combine_data.at[k, '3SsnPorch'] + combine_data.at[k, 'ScreenPorch'] + combine_data.at[k, 'WoodDeckSF']
 	combine_data.at[k, 'Bath_count'] = combine_data.at[k, 'BsmtFullBath'] + combine_data.at[k, 'FullBath'] + 0.5*combine_data.at[k, 'BsmtHalfBath'] + 0.5*combine_data.at[k, 'HalfBath']
-	combine_data.at[k, 'LotFrontage'] = combine_data.at[k, 'LotFrontage'] / np.sqrt(combine_data.at[k,'LotArea'])
+	##combine_data.at[k, 'LotFrontage'] = combine_data.at[k, 'LotFrontage'] / np.sqrt(combine_data.at[k,'LotArea'])
 	if pd.isna(combine_data.at[k, 'MSZoning']): #####Fill missing values based on 
 		combine_data.at[k, 'MSZoning'] = 'C (all)'
 		if combine_data.at[k,'YearBuilt'] > 1938:
@@ -269,6 +257,10 @@ while k < len(combine_data):
 			combine_data.at[k, 'MSZoning'] = 'FV'
 	k+=1
 
+as_string_list = ['MoSold', 'MSSubClass', 'GarageCars', 'KitchenAbvGr', 'BedroomAbvGr', 'Fireplaces', 'Bath_count', 'GarageYrBlt']
+for col in as_string_list:
+	combine_data[col] = combine_data[col].astype(str)
+
 #####CONVERT PORCH FEATURES TO BINARY
 for col in porch_list:
 	combine_data.loc[combine_data[col] > 0, col] = 1
@@ -276,18 +268,13 @@ for col in porch_list:
 i = i.rename({'OpenPorchSF': 'OpenPorch', 'WoodDeckSF': 'WoodDeck'}, axis=1)
 
 #####DROP COLUMNS THAT HAVE BEEN USED FOR ENGINEERRING
-drop_eng_list = ['YrSold', 'YearBuilt', 'YearRemodAdd', 'PoolArea']
+drop_eng_list = ['YrSold', 'YearBuilt', 'YearRemodAdd', 'PoolArea', 'GarageYrBlt']
 drop_eng_list.extend([*bath_list, *garage_list])
 combine_data.drop(drop_eng_list, axis=1, inplace=True)
 
 mis_train = combine_data.isnull().sum()
 print('Columns with missing values after manual filling:')
 print(mis_train[mis_train > 0])		
-for col in combine_data.columns: ####Fill missing values in left over columnt with most frequent value
-	if col not in 'SalePrice':
-		imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
-		imputer.fit(combine_data[[col]])
-		combine_data[[col]] = imputer.transform(combine_data[[col]])
 
 list_empty=combine_data.columns[combine_data.isnull().any()].tolist()
 missing = []
@@ -311,52 +298,59 @@ for col in combine_data.columns:
 		combine_data = pd.concat([combine_data,pd.get_dummies(combine_data[col], prefix = col)],axis = 1)
 		combine_data.drop(col, axis=1, inplace=True)
 
-train = combine_data.loc[combine_data['Test'] == 0].copy()
-train.drop('Test', axis=1, inplace=True)
-test = combine_data.loc[combine_data['Test'] == 1].copy()
-test.drop('Test', axis=1, inplace=True)
-test.drop('SalePrice', axis=1, inplace=True)
-
-#####REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
-train.name = 'train'
-test.name = 'test'
-data = [train,test]
-
-binary_col_list = return_binary_col(train)
+binary_col_list = return_binary_col(combine_data)
 
 #####HISTOGRAMS CONTINUOUS DATA
 f, ax = plt.subplots(5, 6, figsize=(30, 25))
 l=1
-for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+for col in [elem for elem in list(set(combine_data.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
 	ax = plt.subplot(5,6,l)
-	sn.histplot(data=train[col])
+	sn.histplot(data=combine_data[col])
 	ax.set_title(col)
 	l+=1
 f.tight_layout()
 plt.savefig('graphs/hist_num.png')
 plt.close
 
-#####TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
-transform_list=['SalePrice','LotArea','LotFrontage','GrLivArea','TotalBsmtSF', '1stFlrSF','2ndFlrSF', 'GarageArea','PorchSF', 'BsmtFinSF1', 'BsmtFinSF2', 'MiscVal', 'MiscVnrArea']
-for i in data:
-	for col in [element for element in transform_list if element in train]:
-		if i.name == 'test' and col == 'SalePrice':
-			pass
-		elif i.name == 'train' and col == 'SalePrice':
-			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
-		else:
-			i[col] = np.log1p(i.loc[:,col].values.reshape(-1, 1))
+#####SKEWNESS OF CONTINUOUS FEATURES
+transform_list=['LotArea','LotFrontage','GrLivArea','TotalBsmtSF', '1stFlrSF','2ndFlrSF', 'GarageArea','PorchSF', 'BsmtFinSF1', 'BsmtFinSF2', 'MiscVal', 'MiscVnrArea', 'Age', 'SinceRenov']
+cont_skew = {}
+for col in [element for element in transform_list if element in combine_data]:
+	cont_skew[col] = combine_data[col].skew()
+print('\nSkewness of continuous features:')
+[print(key,':',value) for key, value in cont_skew.items()]
+
+#####SCALE AND TRANSFORM CONTINUOUS DATA TO REDUCE SKEWNESS
+mm_scaler = preprocessing.MinMaxScaler()
+pt = PowerTransformer()
+for col in [element for element in transform_list if element in combine_data]:
+	combine_data[col] = mm_scaler.fit_transform(combine_data.loc[:,col].values.reshape(-1, 1))
+	combine_data[col] = pt.fit_transform(combine_data.loc[:,col].values.reshape(-1, 1))
 
 f, ax = plt.subplots(5, 6, figsize=(25, 20))
 l=1
-for i in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+for col in [elem for elem in list(set(combine_data.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
 	ax = plt.subplot(5,6,l)
-	sn.histplot(data=train[i])
-	ax.set_title(i)
+	sn.histplot(data=combine_data[col])
+	ax.set_title(col)
 	l+=1
 f.tight_layout()
 plt.savefig('graphs/hist_num_quantile.png')
 plt.close
+
+######SPLIT IN TEST AND TRAIN AGAIN
+train = combine_data.loc[combine_data['Test'] == 0].copy()
+train.drop('Test', axis=1, inplace=True)
+test = combine_data.loc[combine_data['Test'] == 1].copy()
+test.drop('Test', axis=1, inplace=True)
+test.drop('SalePrice', axis=1, inplace=True)
+
+train['SalePrice'] = np.log1p(train.loc[:,'SalePrice'].values.reshape(-1, 1))
+
+#####REDEFINE DATA, TRAIN AND TEST NAME DUE TO CONCAT
+train.name = 'train'
+test.name = 'test'
+data = [train,test]
 
 f, ax = plt.subplots(5, 6, figsize=(25, 20))
 l=1
@@ -385,7 +379,7 @@ print(*drop_corr, sep = '\n')
 cont_skew = {}
 for col in [element for element in transform_list if element in train]:
 	cont_skew[col] = train[col].skew()
-print('\nSkewness of continuous features:')
+print('\nSkewness after scaling and transformation of features:')
 [print(key,':',value) for key, value in cont_skew.items()]
 
 #####CHECK FOR OUTLIERS
@@ -406,17 +400,19 @@ plt.savefig('graphs/scatter_price_cont_final.png')
 plt.close
 
 #####DROP COLUMNS WITH NO CORRELATION TO PRICE, BASED ON PREVIOUS SCATTER PLOT
-drop_scatter_list = ['KitchenAbvGrd', 'BsmtFinSF2', 'MiscVal', 'LowQualFinSF', 'BedRoomAbvGrd']
+drop_scatter_list = ['BsmtFinSF2', 'LowQualFinSF']
+for i in data:
+	i.drop(drop_scatter_list, axis=1, inplace=True)
 
 #####REMOVE SOME MAX OUTLIERS - JUDGEMENT BASED ON SCATTER PLOT
-outlier_col = ['LotArea', 'LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF']
+outlier_col = ['LotFrontage', 'MasVnrArea', 'GrLivArea', 'TotalBsmtSF','GarageArea', 'QualitySum']
 outlier_row = []
 for col in outlier_col:
 	if train[col].idxmax() in outlier_row:
 		pass
 	else:
 		outlier_row.append(train[col].idxmax())
-	if col in ('GrLivArea'):
+	if col in ('GrLivArea', 'LotFrontage'):
 		print('\nMaximal values of %s:' % col)
 		print(train[col].nlargest(2))
 		second_max = train.loc[train[col] == train[col].nlargest(2).iloc[1]].index[0]
@@ -674,43 +670,43 @@ Y_pred = lgb_reg_opt.predict(x_test)
 print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 ####TRAIN XGB REGRESSOR WITH ALL TRAIN DATA
-estimator = xgb.XGBRegressor(
-    n_jobs=-1,
-    verbosity=0,
-)
+# estimator = xgb.XGBRegressor(
+#     n_jobs=-1,
+#     verbosity=0,
+# )
 
-search_space = {
-    'learning_rate': (Real(0.001, 1.0, 'log-uniform')),
-    'eta': (Real(0.1, 0.5, 'log-uniform')),
-    'gamma': (0.0, 0.5),
-    'min_child_weight': (0, 10),
-    'max_depth': (2, 12),
-    'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
-    'min_child_weight': (0, 5),
-    'reg_lambda': (Real(0.00001,1,'log-uniform')),
-    'reg_alpha': (Real(0.00001,1,'log-uniform')),
-    'subsample': (0.5, 1.0),
-    'n_estimators': (5, 5000),
-}
+# search_space = {
+#     'learning_rate': (Real(0.001, 1.0, 'log-uniform')),
+#     'eta': (Real(0.1, 0.5, 'log-uniform')),
+#     'gamma': (0.0, 0.5),
+#     'min_child_weight': (0, 10),
+#     'max_depth': (2, 12),
+#     'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
+#     'min_child_weight': (0, 5),
+#     'reg_lambda': (Real(0.00001,1,'log-uniform')),
+#     'reg_alpha': (Real(0.00001,1,'log-uniform')),
+#     'subsample': (0.5, 1.0),
+#     'n_estimators': (5, 5000),
+# }
 
-cv = KFold(n_splits=5, shuffle=True)
-n_iterations = 50
-bayes_cv_tuner = BayesSearchCV(
-    estimator=estimator,
-    search_spaces=search_space,
-    scoring='neg_root_mean_squared_error',
-    cv=cv,
-    n_jobs=-1,
-    n_iter=n_iterations,
-    verbose=0,
-    refit=True,
-)
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_root_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
 
-xg_reg_all_data = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
-print('\nOptimized XGBoost Parameters for All Data:')
-print(xg_reg_all_data.best_params_)
-Y_pred = xg_reg_all_data.predict(x_test)
-print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+# xg_reg_all_data = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+# print('\nOptimized XGBoost Parameters for All Data:')
+# print(xg_reg_all_data.best_params_)
+# Y_pred = xg_reg_all_data.predict(x_test)
+# print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 # xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.02206560306361786, colsample_bytree = 0.13229035226856173, eta = 0.07009800269441162, gamma= 0.0, max_depth = 2, min_child_weight = 0, n_estimators = 2441, reg_alpha = 1e-05, reg_lambda = 3.1417848320047077, subsample = 0.7286057220169017)
 # xg_reg_all_data.fit(X_train,Y_train)
@@ -730,9 +726,9 @@ prediction_catboost = np.expm1(prediction_catboost)
 predict_export['SalePrice'] = prediction_catboost
 predict_export.to_csv('submission_cb.csv',index=False)
 
-predict_export = pd.DataFrame()
-predict_export['Id'] = test['Id']
-prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
-prediction_xgboost = np.expm1(prediction_xgboost)
-predict_export['SalePrice'] = prediction_xgboost
-predict_export.to_csv('submission_xgb_all.csv',index=False)
+# predict_export = pd.DataFrame()
+# predict_export['Id'] = test['Id']
+# prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
+# prediction_xgboost = np.expm1(prediction_xgboost)
+# predict_export['SalePrice'] = prediction_xgboost
+# predict_export.to_csv('submission_xgb_all.csv',index=False)
