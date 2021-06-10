@@ -11,8 +11,11 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Lasso
+from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import KFold
+from sklearn.ensemble import StackingRegressor
 
 from skopt import BayesSearchCV
 from skopt.space import Real
@@ -466,8 +469,86 @@ linreg.fit(x_train_lin, y_train)
 Y_pred = linreg.predict(x_test_lin)
 print('Accuracy Linear Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+#####LASSO REGRESSION
+lasso_reg = Lasso(alpha=1.0)
+lasso_reg.fit(x_train,y_train)
+Y_pred=lasso_reg.predict(x_test)
+print('Accuracy Lasso Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+#####OPTIMIZED LASSO REGRESSION
+# estimator = Lasso()
+
+# search_space = {
+# 	'alpha': (Real(0.0000001, 1.0, 'log-uniform')),
+# }
+
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_root_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
+
+# lasso_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# Y_pred=lasso_opt.predict(x_test)
+# print('Accuracy Optimized Lasso Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+## Model #50
+## Best so far: -0.10972
+## Best parameters so far: OrderedDict([('alpha', 0.0005087377044811486)])
+
+lasso_opt = Lasso(alpha=0.0005087377044811486)
+lasso_opt.fit(x_train,y_train)
+Y_pred=lasso_opt.predict(x_test)
+print('Accuracy Optimized Lasso Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+#####RIDGE REGRESSION
+ridge_reg = Ridge(alpha=1.0)
+ridge_reg.fit(x_train,y_train)
+Y_pred=ridge_reg.predict(x_test)
+print('Accuracy Ridge Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+#####OPTIMIZED RIDGE REGRESSION
+# estimator = Ridge()
+
+# search_space = {
+# 	'alpha': (Real(0.0000001, 1.0, 'log-uniform')),
+# }
+
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_root_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
+
+# ridge_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# Y_pred=ridge_opt.predict(x_test)
+# print('Accuracy Optimized Ridge Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+## Model #50
+## Best so far: -0.11585
+## Best parameters so far: OrderedDict([('alpha', 0.9976837820855567)])
+
+ridge_opt = Ridge(alpha=0.9976837820855567)
+ridge_opt.fit(x_train,y_train)
+Y_pred=ridge_opt.predict(x_test)
+print('Accuracy Optimized Ridge Regression (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
 #####RANDOM FOREST REGRESSOR
-rf_reg=RandomForestRegressor(n_estimators= 1000, random_state=666)
+rf_reg=RandomForestRegressor(n_estimators=1000, random_state=666)
 rf_reg.fit(x_train,y_train)
 Y_pred=rf_reg.predict(x_test)
 print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -499,14 +580,12 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 
 # rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
 # Y_pred=rf_reg_opt.predict(x_test)
-# Y_pred = rf_reg_opt.predict(x_test)
 # print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 ## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 10), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 4430)
 rf_reg_opt=RandomForestRegressor(n_estimators= 4430, max_depth = 10, max_features = 'auto', min_samples_leaf = 2, min_samples_split = 2, random_state=666)
 rf_reg_opt.fit(x_train,y_train)
 Y_pred=rf_reg_opt.predict(x_test)
-Y_pred = rf_reg_opt.predict(x_test)
 print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####DETERMINE FEATURE IMPORTANCE
@@ -671,12 +750,73 @@ lgb_reg_opt.fit(x_train,y_train)
 Y_pred = lgb_reg_opt.predict(x_test)
 print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+####OPTIMIZE HYPERPARAMETERS FOR TRAINING ON WHOLE TRAIN SET BEFORE CLASSIFIER STACKING
+print('\n***Compared different regressors for prediction. Removing Random Forest from models. Create a stacked regressor.***')
+
+linreg = LinearRegression()
+linreg.fit(X_train, Y_train)
+Y_pred = linreg.predict(x_test)
+print('Accuracy Linear Regression on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+# estimator = Lasso()
+# search_space = {
+# 	'alpha': (Real(0.0000001, 1.0, 'log-uniform')),
+# }
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_root_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
+# lasso_opt = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+# Y_pred=lasso_opt.predict(x_test)
+# print('Accuracy Optimized Lasso Regression on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Model #50
+## Best so far: -0.10828
+## Best parameters so far: OrderedDict([('alpha', 0.0006712396840610021)])
+lasso_opt = Lasso(alpha=0.0006712396840610021)
+lasso_opt.fit(x_train,y_train)
+Y_pred=lasso_opt.predict(x_test)
+print('Accuracy Optimized Lasso Regression on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+# estimator = Ridge()
+# search_space = {
+# 	'alpha': (Real(0.0000001, 1.0, 'log-uniform')),
+# }
+# cv = KFold(n_splits=5, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+# 	estimator=estimator,
+# 	search_spaces=search_space,
+# 	scoring='neg_root_mean_squared_error',
+# 	cv=cv,
+# 	n_jobs=-1,
+# 	n_iter=n_iterations,
+# 	verbose=0,
+# 	refit=True,
+# )
+# ridge_opt = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+# Y_pred=ridge_opt.predict(x_test)
+# print('Accuracy Optimized sRidge Regression on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Model #50
+## Best so far: -0.11104
+## Best parameters so far: OrderedDict([('alpha', 0.9994679268946952)])
+ridge_opt = Ridge(alpha=0.9994679268946952)
+ridge_opt.fit(x_train,y_train)
+Y_pred=ridge_opt.predict(x_test)
+print('Accuracy Optimized Ridge Regression on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
 ####TRAIN XGB REGRESSOR WITH ALL TRAIN DATA
 # estimator = xgb.XGBRegressor(
 #     n_jobs=-1,
 #     verbosity=0,
 # )
-
 # search_space = {
 #     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
 #     'eta': (Real(0.1, 0.3, 'log-uniform')),
@@ -690,7 +830,6 @@ print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_er
 #     'subsample': (0.5, 1.0),
 #     'n_estimators': (5, 5000),
 # }
-
 # cv = KFold(n_splits=3, shuffle=True)
 # n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
@@ -703,22 +842,102 @@ print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_er
 #     verbose=0,
 #     refit=True,
 # )
-
 # xg_reg_all_data = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
 # print('\nOptimized XGBoost Parameters for All Data:')
 # print(xg_reg_all_data.best_params_)
 # Y_pred = xg_reg_all_data.predict(x_test)
 # print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-
-xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.03617403978211306, colsample_bytree = 0.32947095291159034, eta = 0.26529029266708737, gamma= 0.035245022332880245, max_depth = 7, min_child_weight = 4, n_estimators = 1165, reg_alpha = 0.006119704389393712, reg_lambda = 0.0002700855083204611, subsample = 0.776151259146962)
-xg_reg_all_data.fit(X_train,Y_train)
-Y_pred = xg_reg_all_data.predict(x_test)
-print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 ##Model #50
 ##Best so far: -0.11772
 ##Best parameters so far: OrderedDict([('colsample_bytree', 0.32947095291159034), ('eta', 0.26529029266708737), ('gamma', 0.035245022332880245), ('learning_rate', 0.01355265555001011), ('max_depth', 7), ('min_child_weight', 4), ('n_estimators', 1165), ('reg_alpha', 0.006119704389393712), ('reg_lambda', 0.0002700855083204611), ('subsample', 0.776151259146962)])
+xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.03617403978211306, colsample_bytree = 0.32947095291159034, eta = 0.26529029266708737, gamma= 0.035245022332880245, max_depth = 7, min_child_weight = 4, n_estimators = 1165, reg_alpha = 0.006119704389393712, reg_lambda = 0.0002700855083204611, subsample = 0.776151259146962)
+xg_reg_all_data.fit(X_train,Y_train)
+Y_pred = xg_reg_all_data.predict(x_test)
+print('Accuracy Optimized XGBoost on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+# estimator = cbr.CatBoostRegressor(
+#     silent=True,
+# )
+# search_space = {
+#     'learning_rate': (Real(0.01, 0.3, 'log-uniform')),
+#     'max_depth': (3, 12),
+#     'l2_leaf_reg': (0.2, 30),
+#     'n_estimators': (20, 5000),
+# }
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_root_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
+# cb_reg_opt = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+# print('\nOptimized CatBoost Parameters:')
+# print(cb_reg_opt.best_params_)
+# Y_pred = cb_reg_opt.predict(x_test)
+# print('Accuracy Optimized CatBoost on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+####STILL TO DETERMINE!!!
+cb_reg_opt = cbr.CatBoostRegressor(n_estimators = 1232, l2_leaf_reg = 0.2, learning_rate = 0.06015677013229454, max_depth = 4)
+cb_reg_opt.fit(X_train,Y_train,silent=True)
+Y_pred = cb_reg_opt.predict(x_test)
+print('Accuracy Optimized CatBoost on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
+# estimator = lgb.LGBMRegressor(
+#     n_jobs=-1,
+#     objective = 'regression',
+#     verbosity=-1,
+# )
+# search_space = {
+#     'learning_rate': (Real(0.001, 0.3, 'log-uniform')),
+#     'max_depth': (2, 12),
+#     'num_leaves': (2, 200),
+#     'min_data_in_leaf': (2, 200),
+#     'n_estimators': (20, 5000),
+# }
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 50
+# bayes_cv_tuner = BayesSearchCV(
+#     estimator=estimator,
+#     search_spaces=search_space,
+#     scoring='neg_root_mean_squared_error',
+#     cv=cv,
+#     n_jobs=-1,
+#     n_iter=n_iterations,
+#     verbose=0,
+#     refit=True,
+# )
+# lgb_reg_opt = bayes_cv_tuner.fit(X_train, Y_train, callback=print_status)
+# print('\nOptimized LightGBM Parameters:')
+# print(lgb_reg_opt.best_params_)
+# Y_pred = lgb_reg_opt.predict(x_test)
+# print('Accuracy Optimized LightGBM on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+## Model #50
+## Best so far: -0.11628
+## Best parameters so far: OrderedDict([('learning_rate', 0.02113703073420213), ('max_depth', 2), ('min_data_in_leaf', 2), ('n_estimators', 3817), ('num_leaves', 2)])
+lgb_reg_opt = lgb.LGBMRegressor(n_estimators = 3817, objective = 'regression', learning_rate = 0.02113703073420213, max_depth = 2, min_data_in_leaf = 2, num_leaves = 2)
+lgb_reg_opt.fit(X_train,Y_train)
+Y_pred = lgb_reg_opt.predict(x_test)
+print('Accuracy Optimized LightGBM on all Train Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+
+estimators = [
+	('LR', LinearRegression()),
+	('Lasso', Lasso(alpha=0.0006712396840610021)),
+	('Ridge', Ridge(alpha=0.9994679268946952)),
+	('XGBoost', xgb.XGBRegressor(learning_rate = 0.03617403978211306, colsample_bytree = 0.32947095291159034, eta = 0.26529029266708737, gamma= 0.035245022332880245, max_depth = 7, min_child_weight = 4, n_estimators = 1165, reg_alpha = 0.006119704389393712, reg_lambda = 0.0002700855083204611, subsample = 0.776151259146962)),
+	('CatBoost', cbr.CatBoostRegressor(n_estimators = 1232, l2_leaf_reg = 0.2, learning_rate = 0.06015677013229454, max_depth = 4)),
+	('LightGBM', lgb.LGBMRegressor(verbosity=-1, n_estimators = 3817, objective = 'regression', learning_rate = 0.02113703073420213, max_depth = 2, min_data_in_leaf = 2, num_leaves = 2)),
+]
+regressor_stacked = StackingRegressor(
+	estimators=estimators, final_estimator=Lasso(alpha=0.0006712396840610021)
+)
+regressor_stacked.fit(X_train, Y_train)
+Y_pred = regressor_stacked.predict(x_test)
+print('Accuracy Stacked Regressor (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
 predict_export = pd.DataFrame()
@@ -734,3 +953,10 @@ prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
 prediction_xgboost = np.expm1(prediction_xgboost)
 predict_export['SalePrice'] = prediction_xgboost
 predict_export.to_csv('submission_xgb_all.csv',index=False)
+
+predict_export = pd.DataFrame()
+predict_export['Id'] = test['Id']
+prediction_stacked = regressor_stacked.predict(test.drop('Id', axis=1))
+prediction_stacked = np.expm1(prediction_stacked)
+predict_export['SalePrice'] = prediction_stacked
+predict_export.to_csv('submission_stacked_all.csv',index=False)
