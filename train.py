@@ -192,17 +192,6 @@ while k < len(combine_data):
 		combine_data.at[k,'Pool'] = 1
 	else:
 		combine_data.at[k,'Pool'] = 0
-	# if pd.isna(combine_data.at[k, 'LotFrontage']): ######No strong correlation with any other feature, fill with data mean
-	# 	combine_data.at[k, 'LotFrontage'] = combine_data.loc[combine_data['LotFrontage'] > 0, 'LotFrontage'].mean()		
-	# for col in garage_list:
-	# 	if pd.isna(combine_data.at[k, col]) and not col == 'GarageArea':
-	# 		combine_data.at[k, col] = 'Abs'
-	# if pd.isna(combine_data.at[k, 'GarageArea']):
-	# 	combine_data.at[k, 'GarageArea'] = combine_data.loc[combine_data['GarageArea'] > 0, 'GarageArea'].mean()
-	# if pd.isna(combine_data.at[k, 'GarageCars']):
-	# 	combine_data.at[k, 'GarageCars'] = combine_data.loc[combine_data['GarageCars'] > 0, 'GarageCars'].value_counts().idxmax()
-	# if pd.isna(combine_data.at[k, 'LotFrontage']):  
-	# 	combine_data.at[k, 'LotFrontage'] = np.sqrt(combine_data.at[k,'LotArea']) * combine_data.at['LotFrontage'].mean() / np.sqrt(combine_data.at['LotArea'].mean())
 	for col in bath_list:
 		if pd.isna(combine_data.at[k, col]):
 			if combine_data.at[k, 'TotalBsmtSF'] > 0 and col == 'BsmtFullBath':
@@ -313,7 +302,7 @@ plt.savefig('graphs/hist_num.png')
 plt.close
 
 #####SKEWNESS OF CONTINUOUS FEATURES
-transform_list=['LotArea','LotFrontage','GrLivArea','TotalBsmtSF', '1stFlrSF','2ndFlrSF', 'GarageArea','PorchSF', 'BsmtFinSF1', 'BsmtFinSF2', 'MiscVal', 'MiscVnrArea', 'Age', 'SinceRenov']
+transform_list=['LotArea','LotFrontage','GrLivArea','TotalBsmtSF', '1stFlrSF','2ndFlrSF', 'GarageArea','PorchSF', 'BsmtFinSF1', 'BsmtFinSF2', 'MiscVal', 'MiscVnrArea', 'Age', 'SinceRenov', 'BsmtUnfSF']
 cont_skew = {}
 for col in [element for element in transform_list if element in combine_data]:
 	cont_skew[col] = combine_data[col].skew()
@@ -424,7 +413,7 @@ print('\nRows with max value outliers:')
 print(outlier_row)
 train.drop(train.index[outlier_row], axis=0, inplace=True)
 
-#####FINAL HISTOGRAMS SHWOING DISTRIBUTION OF CONTINUOUS FEATURES
+#####FINAL HISTOGRAMS SHOWING DISTRIBUTION OF CONTINUOUS FEATURES
 f, ax = plt.subplots(5, 5, figsize=(25, 25))
 l=1
 for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
@@ -436,7 +425,17 @@ f.tight_layout()
 plt.savefig('graphs/hist_after_distr.png')
 plt.close
 
-#####DROP CONTINUOUS FEATURES WITH LOW CORRELATION
+#####SCATTER PLOT CONTINUOUS FEATURES FINAL
+f, ax = plt.subplots(5, 5, figsize=(20, 20))
+l=1
+for col in [elem for elem in list(set(train.columns) - set(binary_col_list)) if elem not in ['SalePrice', 'Id']]:
+	ax = plt.subplot(5,5,l)
+	sn.scatterplot(x=col,y='SalePrice',data=train)
+	ax.set_title(col)
+	l+=1
+f.tight_layout()
+plt.savefig('graphs/scatter_price_cont_final_outliers.png')
+plt.close
 
 #####FINAL CORRELATION MATRIX
 trainMatrix = train[list(set(train.columns) - set(binary_col_list))].corr()
@@ -485,7 +484,7 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # 	'max_features': ['auto', 'sqrt', 'log2', None],
 # 	'n_estimators': (5, 5000),
 # }
-# cv = KFold(n_splits=3, shuffle=False)
+# cv = KFold(n_splits=5, shuffle=True)
 # n_iterations = 50
 # bayes_cv_tuner = BayesSearchCV(
 # 	estimator=estimator,
@@ -499,9 +498,12 @@ print('Accuracy Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(n
 # )
 
 # rf_reg_opt = bayes_cv_tuner.fit(x_train, y_train, callback=print_status)
+# Y_pred=rf_reg_opt.predict(x_test)
+# Y_pred = rf_reg_opt.predict(x_test)
+# print('Accuracy Optimized Random Forest (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 10), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 8), ('n_estimators', 4686)
-rf_reg_opt=RandomForestRegressor(n_estimators= 4686, max_depth = 10, max_features = 'auto', min_samples_leaf = 2, min_samples_split = 8, random_state=666)
+## Optimized Random Forest Classifier: Optimized Random Forest Parameters: ('max_depth', 10), ('max_features', 'auto'), ('min_samples_leaf', 2), ('min_samples_split', 2), ('n_estimators', 4430)
+rf_reg_opt=RandomForestRegressor(n_estimators= 4430, max_depth = 10, max_features = 'auto', min_samples_leaf = 2, min_samples_split = 2, random_state=666)
 rf_reg_opt.fit(x_train,y_train)
 Y_pred=rf_reg_opt.predict(x_test)
 Y_pred = rf_reg_opt.predict(x_test)
@@ -543,10 +545,10 @@ plt.close
 
 # search_space = {
 #     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
-#     'eta': (Real(0.01, 0.3, 'log-uniform')),
+#     'eta': (Real(0.1, 0.3, 'log-uniform')),
 #     'gamma': (0.0, 0.5),
 #     'min_child_weight': (0, 10),
-#     'max_depth': (2, 10),
+#     'max_depth': (3, 12),
 #     'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
 #     'min_child_weight': (0, 5),
 #     'reg_lambda': (Real(0.00001,10,'log-uniform')),
@@ -555,7 +557,7 @@ plt.close
 #     'n_estimators': (5, 5000),
 # }
 
-# cv = KFold(n_splits=3, shuffle=False)
+# cv = KFold(n_splits=3, shuffle=True)
 # n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
@@ -573,9 +575,9 @@ plt.close
 # print(xg_reg_opt.best_params_)
 # Y_pred = xg_reg_opt.predict(x_test)
 # print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters XGBoost: ('colsample_bytree', 0.1808435156234171), ('eta', 0.01), ('gamma', 0.0), ('learning_rate', 0.01), ('max_depth', 4), ('min_child_weight', 0), ('n_estimators', 1375), ('reg_alpha', 1e-05), ('reg_lambda', 0.03219077770797261), ('subsample', 0.5)
+## Best parameters XGBoost: ('colsample_bytree', 0.0809183639617255), ('eta', 0.14395579198795824), ('gamma', 0.0), ('learning_rate', 0.01), ('max_depth', 3), ('min_child_weight', 2), ('n_estimators', 5000), ('reg_alpha', 2.1111511555685248e-05), ('reg_lambda', 4.646383212428153e-05), ('subsample', 0.9201204812324644)
 
-xg_reg_opt = xgb.XGBRegressor(n_estimators = 1375, colsample_bytree = 0.1808435156234171, eta = 0.01, gamma = 0.0, learning_rate = 0.01, max_depth = 4, min_child_weight = 0, reg_alpha = 1e-05, reg_lambda = 0.03219077770797261, subsample = 0.5)
+xg_reg_opt = xgb.XGBRegressor(n_estimators = 5000, colsample_bytree = 0.0809183639617255, eta = 0.14395579198795824, gamma = 0.0, learning_rate = 0.01, max_depth = 3, min_child_weight = 2, reg_alpha = 2.1111511555685248e-05, reg_lambda = 4.646383212428153e-05, subsample = 0.9201204812324644)
 xg_reg_opt.fit(x_train,y_train)
 Y_pred = xg_reg_opt.predict(x_test)
 print('Accuracy Optimized XGBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -598,8 +600,8 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 #     'n_estimators': (20, 5000),
 # }
 
-# cv = KFold(n_splits=3, shuffle=False)
-# n_iterations = 50
+# cv = KFold(n_splits=3, shuffle=True)
+# n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
 #     search_spaces=search_space,
@@ -616,9 +618,9 @@ print('Accuracy CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print(cb_reg_opt.best_params_)
 # Y_pred = cb_reg_opt.predict(x_test)
 # print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters: ('n_estimators', 1154), ('l2_leaf_reg', 0.2), ('learning_rate', 0.04788923763413573), ('max_depth', 5)
+## Best parameters: ('l2_leaf_reg', 0.2), ('learning_rate', 0.06015677013229454), ('max_depth', 4), ('n_estimators', 1232)
 
-cb_reg_opt = cbr.CatBoostRegressor(n_estimators = 1154, l2_leaf_reg = 0.2, learning_rate = 0.04788923763413573, max_depth = 5)
+cb_reg_opt = cbr.CatBoostRegressor(n_estimators = 1232, l2_leaf_reg = 0.2, learning_rate = 0.06015677013229454, max_depth = 4)
 cb_reg_opt.fit(x_train,y_train,silent=True)
 Y_pred = cb_reg_opt.predict(x_test)
 print('Accuracy Optimized CatBoost (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -639,12 +641,12 @@ print('Accuracy LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # search_space = {
 #     'learning_rate': (Real(0.001, 0.3, 'log-uniform')),
 #     'max_depth': (2, 12),
-#     'num_leaves': (20, 200),
-#     'min_data_in_leaf': (10, 200),
+#     'num_leaves': (2, 200),
+#     'min_data_in_leaf': (2, 200),
 #     'n_estimators': (20, 5000),
 # }
 
-# cv = KFold(n_splits=5, shuffle=False)
+# cv = KFold(n_splits=3, shuffle=True)
 # n_iterations = 100
 # bayes_cv_tuner = BayesSearchCV(
 #     estimator=estimator,
@@ -662,9 +664,9 @@ print('Accuracy LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.exp
 # print(lgb_reg_opt.best_params_)
 # Y_pred = lgb_reg_opt.predict(x_test)
 # print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-## Best parameters: ('learning_rate', 0.016414771531206136), ('max_depth', 2), ('min_data_in_leaf', 10), ('n_estimators', 3608), ('num_leaves', 200)
+## Best parameters: ('learning_rate', 0.04073689840245192), ('max_depth', 2), ('min_data_in_leaf', 2), ('n_estimators', 3423), ('num_leaves', 2)
 
-lgb_reg_opt = lgb.LGBMRegressor(n_estimators = 3608, objective = 'regression', learning_rate = 0.016414771531206136, max_depth = 2, min_data_in_leaf = 10, num_leaves = 200)
+lgb_reg_opt = lgb.LGBMRegressor(n_estimators = 3423, objective = 'regression', learning_rate = 0.04073689840245192, max_depth = 2, min_data_in_leaf = 2, num_leaves = 2)
 lgb_reg_opt.fit(x_train,y_train)
 Y_pred = lgb_reg_opt.predict(x_test)
 print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
@@ -676,15 +678,15 @@ print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_er
 # )
 
 # search_space = {
-#     'learning_rate': (Real(0.001, 1.0, 'log-uniform')),
-#     'eta': (Real(0.1, 0.5, 'log-uniform')),
+#     'learning_rate': (Real(0.01, 1.0, 'log-uniform')),
+#     'eta': (Real(0.1, 0.3, 'log-uniform')),
 #     'gamma': (0.0, 0.5),
 #     'min_child_weight': (0, 10),
-#     'max_depth': (2, 12),
+#     'max_depth': (3, 12),
 #     'colsample_bytree': (Real(0.01, 1.0, 'log-uniform')),
 #     'min_child_weight': (0, 5),
-#     'reg_lambda': (Real(0.00001,1,'log-uniform')),
-#     'reg_alpha': (Real(0.00001,1,'log-uniform')),
+#     'reg_lambda': (Real(0.00001,10,'log-uniform')),
+#     'reg_alpha': (Real(0.00001,10,'log-uniform')),
 #     'subsample': (0.5, 1.0),
 #     'n_estimators': (5, 5000),
 # }
@@ -708,14 +710,14 @@ print('Accuracy Optimized LightGBM (RMSLE):',np.sqrt(metrics.mean_squared_log_er
 # Y_pred = xg_reg_all_data.predict(x_test)
 # print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
 
-# xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.02206560306361786, colsample_bytree = 0.13229035226856173, eta = 0.07009800269441162, gamma= 0.0, max_depth = 2, min_child_weight = 0, n_estimators = 2441, reg_alpha = 1e-05, reg_lambda = 3.1417848320047077, subsample = 0.7286057220169017)
-# xg_reg_all_data.fit(X_train,Y_train)
-# Y_pred = xg_reg_all_data.predict(x_test)
-# print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
-##('colsample_bytree', 1.0), ('eta', 0.01), ('gamma', 0.0), ('learning_rate', 0.03617403978211306), ('max_depth', 2), ('min_child_weight', 2), ('n_estimators', 1885), ('reg_alpha', 1e-05), ('reg_lambda', 0.00038450044163168285), ('subsample', 0.6114543006399086)
-##Model #100
-##Best so far: -0.1113
-##Best parameters so far: OrderedDict([('colsample_bytree', 0.13229035226856173), ('eta', 0.07009800269441162), ('gamma', 0.0), ('learning_rate', 0.02206560306361786), ('max_depth', 2), ('min_child_weight', 0), ('n_estimators', 2441), ('reg_alpha', 1e-05), ('reg_lambda', 3.1417848320047077), ('subsample', 0.7286057220169017)])
+xg_reg_all_data = xgb.XGBRegressor(learning_rate = 0.03617403978211306, colsample_bytree = 0.32947095291159034, eta = 0.26529029266708737, gamma= 0.035245022332880245, max_depth = 7, min_child_weight = 4, n_estimators = 1165, reg_alpha = 0.006119704389393712, reg_lambda = 0.0002700855083204611, subsample = 0.776151259146962)
+xg_reg_all_data.fit(X_train,Y_train)
+Y_pred = xg_reg_all_data.predict(x_test)
+print('Accuracy Optimized XGBoost Trained on all Data (RMSLE):',np.sqrt(metrics.mean_squared_log_error(np.expm1(y_test), np.expm1(Y_pred))))
+##Model #50
+##Best so far: -0.11772
+##Best parameters so far: OrderedDict([('colsample_bytree', 0.32947095291159034), ('eta', 0.26529029266708737), ('gamma', 0.035245022332880245), ('learning_rate', 0.01355265555001011), ('max_depth', 7), ('min_child_weight', 4), ('n_estimators', 1165), ('reg_alpha', 0.006119704389393712), ('reg_lambda', 0.0002700855083204611), ('subsample', 0.776151259146962)])
+
 
 
 #####PREDICT TEST DATA AND EXPORT FOR UPLOAD
@@ -726,9 +728,9 @@ prediction_catboost = np.expm1(prediction_catboost)
 predict_export['SalePrice'] = prediction_catboost
 predict_export.to_csv('submission_cb.csv',index=False)
 
-# predict_export = pd.DataFrame()
-# predict_export['Id'] = test['Id']
-# prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
-# prediction_xgboost = np.expm1(prediction_xgboost)
-# predict_export['SalePrice'] = prediction_xgboost
-# predict_export.to_csv('submission_xgb_all.csv',index=False)
+predict_export = pd.DataFrame()
+predict_export['Id'] = test['Id']
+prediction_xgboost = xg_reg_all_data.predict(test.drop('Id', axis=1))
+prediction_xgboost = np.expm1(prediction_xgboost)
+predict_export['SalePrice'] = prediction_xgboost
+predict_export.to_csv('submission_xgb_all.csv',index=False)
